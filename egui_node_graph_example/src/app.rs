@@ -360,33 +360,40 @@ impl epi::App for NodeGraphExample {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &epi::Frame) {
-        let graph_response = self.state.draw_graph_editor(ctx, AllMyNodeTemplates);
-        for node_response in graph_response.node_responses {
-            // Here, we ignore all other graph events. But you may find
-            // some use for them. For example, by playing a sound when a new
-            // connection is created
-            if let NodeResponse::User(user_event) = node_response {
-                match user_event {
-                    MyResponse::SetActiveNode(node) => {
-                        self.state.user_state.active_node = Some(node)
+        if let Some(inner_response) =
+                egui::Window::new("window test").show(&ctx, |ui| {
+                    self.state.draw_graph_editor(ctx, ui,  AllMyNodeTemplates)
+                })
+            {
+            if let Some(graph_response) = inner_response.inner {
+                for node_response in graph_response.node_responses {
+                    // Here, we ignore all other graph events. But you may find
+                    // some use for them. For example, by playing a sound when a new
+                    // connection is created
+                    if let NodeResponse::User(user_event) = node_response {
+                        match user_event {
+                            MyResponse::SetActiveNode(node) => {
+                                self.state.user_state.active_node = Some(node)
+                            }
+                            MyResponse::ClearActiveNode => self.state.user_state.active_node = None,
+                        }
                     }
-                    MyResponse::ClearActiveNode => self.state.user_state.active_node = None,
                 }
             }
-        }
-
-        if let Some(node) = self.state.user_state.active_node {
-            let text = match evaluate_node(&self.state.graph, node, &mut HashMap::new()) {
-                Ok(value) => format!("The result is: {:?}", value),
-                Err(err) => format!("Execution error: {}", err),
-            };
-            ctx.debug_painter().text(
-                egui::pos2(10.0, 10.0),
-                egui::Align2::LEFT_TOP,
-                text,
-                TextStyle::Button.resolve(&ctx.style()),
-                egui::Color32::WHITE,
-            );
+    
+            if let Some(node) = self.state.user_state.active_node {
+                let text = match evaluate_node(&self.state.graph, node, &mut HashMap::new()) {
+                    Ok(value) => format!("The result is: {:?}", value),
+                    Err(err) => format!("Execution error: {}", err),
+                };
+                ctx.debug_painter().text(
+                    egui::pos2(10.0, 10.0),
+                    egui::Align2::LEFT_TOP,
+                    text,
+                    TextStyle::Button.resolve(&ctx.style()),
+                    egui::Color32::WHITE,
+                );
+            }
         }
     }
 }
