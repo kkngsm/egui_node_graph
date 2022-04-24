@@ -1,7 +1,10 @@
-__ This is a fork of the original [egui_node_graph](https://github.com/setzer22/egui_node_graph), which implements two currently pending PRs. __
-__ 1. [Upgrade to 0.17](https://github.com/setzer22/egui_node_graph/pull/18) __
-__ 2. [Allow egui_node_graph to work in windows](https://github.com/setzer22/egui_node_graph/pull/19) __
-__ The original README.md follows __
+__This is a fork of the original [egui_node_graph](https://github.com/setzer22/egui_node_graph), which implements two currently pending PRs.__
+
+__1. [Upgrade to 0.17](https://github.com/setzer22/egui_node_graph/pull/18)__
+
+__2. [Allow egui_node_graph to work in windows](https://github.com/setzer22/egui_node_graph/pull/19)__
+
+__The original README.md follows__
 
 
 # Egui Node Graph
