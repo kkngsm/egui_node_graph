@@ -1,8 +1,8 @@
 # Egui Node Graph
 > There you have it! Now go build your next awesome node graph thing in Rust 🦀
 
-[![Latest version](https://img.shields.io/crates/v/egui_node_graph.svg)](https://crates.io/crates/egui_node_graph)
-[![Documentation](https://docs.rs/egui_node_graph/badge.svg)](https://docs.rs/egui_node_graph)
+[![Latest version](https://img.shields.io/crates/v/yew_node_graph.svg)](https://crates.io/crates/yew_node_graph)
+[![Documentation](https://docs.rs/yew_node_graph/badge.svg)](https://docs.rs/yew_node_graph)
 ![MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 
@@ -29,7 +29,7 @@ To see a node graph in action, simply clone this repository and launch the
 example using `cargo run`. This should open a window with an empty canvas. Right
 clicking anywhere on the screen will bring up the *node finder* menu.
 
-The [application code in the example](https://github.com/setzer22/egui_node_graph/blob/main/egui_node_graph_example/src/app.rs)
+The [application code in the example](https://github.com/setzer22/yew_node_graph/blob/main/yew_node_graph_example/src/app.rs)
 is thoroughly commented and serves as a good introduction to embedding this
 library in your egui project.
 
