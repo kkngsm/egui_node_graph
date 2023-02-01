@@ -2,19 +2,19 @@ use crate::Vec2;
 use stylist::yew::styled_component;
 use yew::prelude::*;
 #[derive(Properties, PartialEq)]
-pub struct FinderProps {
+pub struct ContextMenuProps {
     #[prop_or_default]
     pub children: Children,
     pub is_showing: bool,
     pub pos: Vec2,
 }
-#[styled_component(Finder)]
-pub fn finder(
-    FinderProps {
+#[styled_component(ContextMenu)]
+pub fn contextmenu(
+    ContextMenuProps {
         children,
         is_showing,
         pos,
-    }: &FinderProps,
+    }: &ContextMenuProps,
 ) -> Html {
     let style = format!(
         "
@@ -28,7 +28,7 @@ position:fixed;
         pos.y
     );
     html! {
-        <div class={"node_finder"} {style}>
+        <div class={"node_ContextMenu"} {style}>
             { for children.iter() }
         </div>
     }

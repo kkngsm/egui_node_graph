@@ -1010,6 +1010,7 @@ name = "yew-node-graph_example"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "log",
  "wasm-logger",
  "yew",
  "yew_node_graph",
@@ -1020,7 +1021,6 @@ name = "yew_node_graph"
 version = "0.4.0"
 dependencies = [
  "glam",
- "log",
  "serde",
  "slotmap",
  "smallvec",

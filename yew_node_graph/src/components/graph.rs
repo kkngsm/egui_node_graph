@@ -2,7 +2,6 @@ use stylist::yew::styled_component;
 use yew::prelude::*;
 #[derive(Properties, PartialEq)]
 pub struct GraphProps {
-    #[prop_or_default]
     pub children: Children,
     pub onevent: Option<Callback<BackgroundEvent>>,
 }

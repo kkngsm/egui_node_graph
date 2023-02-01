@@ -1,8 +1,9 @@
 use std::borrow::Cow;
 use yew_node_graph::{
-    model::{
-        DataTypeTrait, Graph, GraphEditorState, InputParamKind, NodeDataTrait, NodeId,
-        NodeTemplateIter, NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
+    components::BasicGraphEditor,
+    state::{
+        DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId, NodeTemplateIter,
+        NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
     },
     *,
 };
@@ -590,6 +591,8 @@ type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
 
 fn main() {
     wasm_logger::init(wasm_logger::Config::default());
-    yew::Renderer::<GraphEditor<MyNodeData, MyDataType, MyValueType, MyNodeTemplate, MyGraphState>>::new()
-        .render();
+    yew::Renderer::<
+        BasicGraphEditor<MyNodeData, MyDataType, MyValueType, MyNodeTemplate, MyGraphState>,
+    >::new()
+    .render();
 }

@@ -1,12 +1,13 @@
 [package]
+edition = "2021"
 name = "yew-node-graph_example"
 version = "0.1.0"
-edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-yew = {version = "0.20.0", features = ["csr"]}
-wasm-logger = "0.2.0"
-yew_node_graph = {path = "../yew_node_graph"}
 anyhow = "1.0.68"
+log = "0.4.17"
+wasm-logger = "0.2.0"
+yew = {version = "0.20.0", features = ["csr"]}
+yew_node_graph = {path = "../yew_node_graph"}
