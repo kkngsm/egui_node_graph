@@ -9,3 +9,4 @@ edition = "2021"
 yew = {version = "0.20.0", features = ["csr"]}
 wasm-logger = "0.2.0"
 yew_node_graph = {path = "../yew_node_graph"}
+anyhow = "1.0.68"

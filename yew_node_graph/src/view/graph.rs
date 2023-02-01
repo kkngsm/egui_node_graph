@@ -8,7 +8,7 @@ pub struct GraphProps {
 #[styled_component(GraphArea)]
 pub fn graph_area(GraphProps { children }: &GraphProps) -> Html {
     let graph_area = css!(
-r#"
+        r#"
 clip-path:inset(100%);
 "#
     );

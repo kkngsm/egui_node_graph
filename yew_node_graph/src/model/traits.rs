@@ -13,27 +13,26 @@ pub trait WidgetValueTrait: Default {
     type Response;
     type UserState;
     type NodeData;
-    /// This method will be called for each input parameter with a widget. The
-    /// return value is a vector of custom response objects which can be used
-    /// to implement handling of side effects. If unsure, the response Vec can
-    /// be empty.
-    fn value_widget(
-        &mut self,
-        param_name: &str,
-        node_id: NodeId,
-        ui: &mut egui::Ui,
-        user_state: &mut Self::UserState,
-        node_data: &Self::NodeData,
-    ) -> Vec<Self::Response>;
+
+    //TODO
+    // /// This method will be called for each input parameter with a widget. The
+    // /// return value is a vector of custom response objects which can be used
+    // /// to implement handling of side effects. If unsure, the response Vec can
+    // /// be empty.
+    // fn value_widget(
+    //     &mut self,
+    //     param_name: &str,
+    //     node_id: NodeId,
+    //     ui: &mut egui::Ui,
+    //     user_state: &mut Self::UserState,
+    //     node_data: &Self::NodeData,
+    // ) -> Vec<Self::Response>;
 }
 
 /// This trait must be implemented by the `DataType` generic parameter of the
 /// [`Graph`]. This trait tells the library how to visually expose data types
 /// to the user.
 pub trait DataTypeTrait<UserState>: PartialEq + Eq {
-    /// The associated port color of this datatype
-    fn data_type_color(&self, user_state: &mut UserState) -> egui::Color32;
-
     /// The name of this datatype. Return type is specified as Cow<str> because
     /// some implementations will need to allocate a new string to provide an
     /// answer while others won't.
@@ -80,37 +79,26 @@ where
     /// Must be set to the custom user `ValueType` type
     type ValueType;
 
-    /// Additional UI elements to draw in the nodes, after the parameters.
-    fn bottom_ui(
-        &self,
-        ui: &mut egui::Ui,
-        node_id: NodeId,
-        graph: &Graph<Self, Self::DataType, Self::ValueType>,
-        user_state: &mut Self::UserState,
-    ) -> Vec<NodeResponse<Self::Response, Self>>
-    where
-        Self::Response: UserResponseTrait;
+    // TODO
+    // /// Additional UI elements to draw in the nodes, after the parameters.
+    // fn bottom_ui(
+    //     &self,
+    //     ui: &mut egui::Ui,
+    //     node_id: NodeId,
+    //     graph: &Graph<Self, Self::DataType, Self::ValueType>,
+    //     user_state: &mut Self::UserState,
+    // ) -> Vec<NodeResponse<Self::Response, Self>>
+    // where
+    //     Self::Response: UserResponseTrait;
 
-    /// Set background color on titlebar
-    /// If the return value is None, the default color is set.
-    fn titlebar_color(
-        &self,
-        _ui: &egui::Ui,
-        _node_id: NodeId,
-        _graph: &Graph<Self, Self::DataType, Self::ValueType>,
-        _user_state: &mut Self::UserState,
-    ) -> Option<egui::Color32> {
-        None
-    }
-
-    fn can_delete(
-        &self,
-        _node_id: NodeId,
-        _graph: &Graph<Self, Self::DataType, Self::ValueType>,
-        _user_state: &mut Self::UserState,
-    ) -> bool {
-        true
-    }
+    // fn can_delete(
+    //     &self,
+    //     _node_id: NodeId,
+    //     _graph: &Graph<Self, Self::DataType, Self::ValueType>,
+    //     _user_state: &mut Self::UserState,
+    // ) -> bool {
+    //     true
+    // }
 }
 
 /// This trait can be implemented by any user type. The trait tells the library

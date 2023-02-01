@@ -1,4 +1,4 @@
-use glam::Vec2;
+use crate::Vec2;
 use stylist::yew::styled_component;
 use yew::prelude::*;
 
@@ -32,7 +32,7 @@ user-select:none;
 display:inline-block;
 "#};
     html! {
-        <div 
+        <div
             ref={div_ref}
             class={classes![
                 node,

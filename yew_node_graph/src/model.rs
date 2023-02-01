@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 use slotmap::{SecondaryMap, SlotMap};
 
 pub type SVec<T> = smallvec::SmallVec<[T; 4]>;
@@ -28,19 +26,7 @@ pub use error::*;
 pub mod ui_state;
 pub use ui_state::*;
 
-/// The node finder is a tiny widget allowing to create new node types
-pub mod node_finder;
-pub use node_finder::*;
-
-/// The inner details of the egui implementation. Most egui code lives here.
-pub mod editor_ui;
-pub use editor_ui::*;
-
 /// Several traits that must be implemented by the user to customize the
 /// behavior of this library.
 pub mod traits;
 pub use traits::*;
-
-mod utils;
-
-mod color_hex_utils;

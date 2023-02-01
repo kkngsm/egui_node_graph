@@ -1,5 +1,5 @@
+use glam::{vec2, Vec2};
 use std::{cell::RefCell, rc::Rc};
-use glam::{Vec2, vec2};
 use wasm_bindgen::{
     prelude::{wasm_bindgen, Closure},
     JsValue,
