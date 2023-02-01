@@ -1,8 +1,14 @@
+use std::rc::Rc;
+
 use crate::components::*;
 use crate::state::GraphEditorState;
 use crate::{vec2, Vec2};
 use yew::prelude::*;
-
+/// Basic GraphEditor components
+/// The following limitations apply
+/// - NodeFinder is the default
+/// - UserState must implement PartialEq
+/// If you want a broader implementation, you may want to define your own components
 pub struct BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate, UserState>
 where
     NodeData: 'static,
@@ -20,11 +26,19 @@ pub enum GraphMessage {
     CloseNodeFinder,
 }
 
+/// Props for [`BasicGraphEditor`]
+#[derive(Properties, PartialEq)]
+pub struct BasicGraphEditorProps<UserState: PartialEq> {
+    use_state: Rc<UserState>,
+}
+
 impl<NodeData, DataType, ValueType, NodeTemplate, UserState> Component
     for BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate, UserState>
+where
+    UserState: PartialEq,
 {
     type Message = GraphMessage;
-    type Properties = ();
+    type Properties = BasicGraphEditorProps<UserState>;
     fn create(_ctx: &Context<Self>) -> Self {
         Self {
             state: Default::default(),
@@ -43,6 +57,7 @@ impl<NodeData, DataType, ValueType, NodeTemplate, UserState> Component
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
         use GraphMessage::*;
+        let BasicGraphEditorProps { use_state } = ctx.props();
         let nodes = self.state.graph.nodes.iter().map(|(id, node)| html!{<Node title={node.label.clone()} pos={self.state.node_positions[id]}/>});
 
         let background_event = ctx.link().callback(|e: BackgroundEvent| match e {
