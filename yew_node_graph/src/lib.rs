@@ -1,9 +1,9 @@
+pub use glam::{vec2, Vec2};
 use model::GraphEditorState;
 use yew::prelude::*;
 mod hooks;
 pub mod model;
 pub mod view;
-pub use glam::{vec2, Vec2};
 use view::*;
 
 pub struct GraphEditor<NodeData, DataType, ValueType, NodeTemplate, UserState>
@@ -50,7 +50,9 @@ impl<NodeData, DataType, ValueType, NodeTemplate, UserState> Component
     fn view(&self, _ctx: &Context<Self>) -> Html {
         let nodes = self.state.graph.nodes.iter().map(|(id, node)| html!{<Node title={node.label.clone()} pos={self.state.node_positions[id]}/>});
         html! {
-            <GraphArea>
+            <GraphArea
+                onevent={|e| log::debug!("{:?}", e)}
+            >
                 {for nodes}
             </GraphArea>
         }
