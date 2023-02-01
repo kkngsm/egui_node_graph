@@ -106,7 +106,7 @@ where
 /// the node finder.
 pub trait NodeTemplateIter {
     type Item;
-    fn all_kinds(&self) -> Vec<Self::Item>;
+    fn all_kinds() -> Vec<Self::Item>;
 }
 
 /// This trait must be implemented by the `NodeTemplate` generic parameter of
@@ -128,10 +128,10 @@ pub trait NodeTemplateTrait: Clone {
     /// The return type is Cow<str> to allow returning owned or borrowed values
     /// more flexibly. Refer to the documentation for `DataTypeTrait::name` for
     /// more information
-    fn node_finder_label(&self, user_state: &mut Self::UserState) -> std::borrow::Cow<str>;
+    fn node_finder_label(&self, user_state: &Self::UserState) -> std::borrow::Cow<str>;
 
     /// Returns a descriptive name for the node kind, used in the graph.
-    fn node_graph_label(&self, user_state: &mut Self::UserState) -> String;
+    fn node_graph_label(&self, user_state: &Self::UserState) -> String;
 
     /// Returns the user data for this node kind.
     fn user_data(&self, user_state: &mut Self::UserState) -> Self::NodeData;

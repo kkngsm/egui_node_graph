@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use yew_node_graph::{
-    components::BasicGraphEditor,
+    components::{BasicGraphEditor, BasicGraphEditorProps},
     state::{
         DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId, NodeTemplateIter,
         NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
@@ -126,7 +126,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
     type ValueType = MyValueType;
     type UserState = MyGraphState;
 
-    fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
+    fn node_finder_label(&self, _user_state: &Self::UserState) -> std::borrow::Cow<str> {
         Cow::Borrowed(match self {
             MyNodeTemplate::MakeVector => "New vector",
             MyNodeTemplate::MakeScalar => "New scalar",
@@ -138,9 +138,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
         })
     }
 
-    fn node_graph_label(&self, user_state: &mut Self::UserState) -> String {
-        // It's okay to delegate this to node_finder_label if you don't want to
-        // show different names in the node finder and the node itself.
+    fn node_graph_label(&self, user_state: &Self::UserState) -> String {
         self.node_finder_label(user_state).into()
     }
 
@@ -244,11 +242,10 @@ impl NodeTemplateTrait for MyNodeTemplate {
     }
 }
 
-pub struct AllMyNodeTemplates;
-impl NodeTemplateIter for AllMyNodeTemplates {
+impl NodeTemplateIter for MyNodeTemplate {
     type Item = MyNodeTemplate;
 
-    fn all_kinds(&self) -> Vec<Self::Item> {
+    fn all_kinds() -> Vec<Self::Item> {
         // This function must return a list of node kinds, which the node finder
         // will use to display it to the user. Crates like strum can reduce the
         // boilerplate in enumerating all variants of an enum.
@@ -591,8 +588,11 @@ type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
 
 fn main() {
     wasm_logger::init(wasm_logger::Config::default());
+    let props = BasicGraphEditorProps {
+        user_state: Default::default(),
+    };
     yew::Renderer::<
         BasicGraphEditor<MyNodeData, MyDataType, MyValueType, MyNodeTemplate, MyGraphState>,
-    >::new()
+    >::with_props(props)
     .render();
 }

@@ -28,7 +28,7 @@ position:fixed;
         pos.y
     );
     html! {
-        <div class={"node_ContextMenu"} {style}>
+        <div class={"node-graph-contextmenu"} {style}>
             { for children.iter() }
         </div>
     }
