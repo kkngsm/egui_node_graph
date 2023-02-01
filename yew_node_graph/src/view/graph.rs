@@ -31,6 +31,7 @@ fn stop_propagation<WrappedEvent>(
     move |e: MouseEvent| {
         if let Some(c) = callback.as_ref() {
             e.stop_propagation();
+            e.prevent_default();
             c.emit(wrap(e))
         }
     }

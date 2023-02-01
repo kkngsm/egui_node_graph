@@ -19,6 +19,8 @@ where
 #[derive(Debug, Clone, Copy)]
 pub enum GraphMessage {
     NodeEvent(NodeEvent),
+    OpenNodeFinder(Vec2),
+    CloseNodeFinder,
 }
 
 impl<NodeData, DataType, ValueType, NodeTemplate, UserState> Component
@@ -33,28 +35,36 @@ impl<NodeData, DataType, ValueType, NodeTemplate, UserState> Component
     }
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         log::debug!("{:?}", msg);
-        // match msg {
-        //     GraphMessage::NodeEvent(node) => match node {
-        // NodeEvent::Drag(drag) => match drag {
-        //     hooks::DragEvent::Start => false,
-        //     hooks::DragEvent::Move(pos, _) => {
-        //         self.pos = pos;
-        //         true
-        //     }
-        //     hooks::DragEvent::End => false,
-        // },
-        //     },
-        // }
+        match msg {
+            GraphMessage::NodeEvent(_) => (),
+            GraphMessage::OpenNodeFinder(pos) => {
+                self.state.node_finder.is_showing = true;
+                self.state.node_finder.pos = pos;
+            }
+            GraphMessage::CloseNodeFinder => self.state.node_finder.is_showing = false,
+        }
         true
     }
-    fn view(&self, _ctx: &Context<Self>) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        use GraphMessage::*;
         let nodes = self.state.graph.nodes.iter().map(|(id, node)| html!{<Node title={node.label.clone()} pos={self.state.node_positions[id]}/>});
+
+        let background_event = ctx.link().callback(|e: BackgroundEvent| match e {
+            BackgroundEvent::ContextMenu(e) => {
+                let pos = vec2(e.client_x() as f32, e.client_y() as f32);
+                OpenNodeFinder(pos)
+            }
+            BackgroundEvent::Click(_) => CloseNodeFinder,
+        });
         html! {
+            <>
             <GraphArea
-                onevent={|e| log::debug!("{:?}", e)}
+                onevent={background_event}
             >
                 {for nodes}
             </GraphArea>
+            <Finder is_showing={self.state.node_finder.is_showing} pos={self.state.node_finder.pos}></Finder>
+            </>
         }
     }
 }

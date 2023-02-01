@@ -29,8 +29,8 @@ pub struct GraphEditorState<NodeData, DataType, ValueType, NodeTemplate, UserSta
     // pub ongoing_box_selection: Option<crate::Vec2>,
     /// The position of each node.
     pub node_positions: SecondaryMap<NodeId, crate::Vec2>,
-    // /// The node finder is used to create new nodes.
-    // pub node_finder: Option<NodeFinder<NodeTemplate>>,
+    /// The node finder is used to create new nodes.
+    pub node_finder: NodeFinder,
     // /// The panning of the graph viewport.
     // pub pan_zoom: PanZoom,
     pub _user_state: PhantomData<fn() -> UserState>,
@@ -47,7 +47,7 @@ impl<NodeData, DataType, ValueType, NodeKind, UserState> Default
             // selected_nodes: Default::default(),
             // ongoing_box_selection: Default::default(),
             node_positions: Default::default(),
-            // node_finder: Default::default(),
+            node_finder: Default::default(),
             // pan_zoom: Default::default(),
             _user_state: Default::default(),
             _template: Default::default(),

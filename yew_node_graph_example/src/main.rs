@@ -355,8 +355,6 @@ impl NodeDataTrait for MyNodeData {
 }
 
 type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
-type MyEditorState =
-    GraphEditorState<MyNodeData, MyDataType, MyValueType, MyNodeTemplate, MyGraphState>;
 
 // #[derive(Default)]
 // pub struct NodeGraphExample {
