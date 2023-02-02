@@ -10,7 +10,7 @@ pub fn graph_area(GraphProps { children, onevent }: &GraphProps) -> Html {
     let graph_area = css!(
         r#"
 position: relative;
-clip-path:inset(100%);
+overflow:hidden;
 "#
     );
     html! {
