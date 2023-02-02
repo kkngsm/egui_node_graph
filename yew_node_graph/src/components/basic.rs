@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::fmt::Debug;
 use std::rc::Rc;
 
 use crate::components::*;
@@ -20,7 +22,9 @@ where
     state: GraphEditorState<NodeData, DataType, ValueType, NodeTemplate, UserState>,
 }
 #[derive(Debug, Clone)]
-pub enum GraphMessage {
+pub enum GraphMessage<NodeTemplate> {
+    CreateNode(NodeTemplate),
+
     NodeEvent(NodeEvent),
     OpenNodeFinder(Vec2),
     CloseNodeFinder,
@@ -29,7 +33,7 @@ pub enum GraphMessage {
 /// Props for [`BasicGraphEditor`]
 #[derive(Properties, PartialEq)]
 pub struct BasicGraphEditorProps<UserState: PartialEq> {
-    pub user_state: Rc<UserState>,
+    pub user_state: Rc<RefCell<UserState>>,
 }
 
 impl<NodeData, DataType, ValueType, NodeTemplate, UserState> Component
@@ -41,25 +45,45 @@ where
             DataType = DataType,
             ValueType = ValueType,
             UserState = UserState,
-        > + NodeTemplateIter<Item = NodeTemplate>,
+        > + NodeTemplateIter<Item = NodeTemplate>
+        + PartialEq
+        + Copy
+        + Debug,
 {
-    type Message = GraphMessage;
+    type Message = GraphMessage<NodeTemplate>;
     type Properties = BasicGraphEditorProps<UserState>;
     fn create(_ctx: &Context<Self>) -> Self {
         Self {
             state: Default::default(),
         }
     }
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        log::debug!("{:?}", &msg);
+        let BasicGraphEditorProps { user_state } = ctx.props();
+        let user_state = &mut *user_state.borrow_mut();
         match msg {
-            GraphMessage::NodeEvent(_) => (),
+            GraphMessage::CreateNode(template) => {
+                let new_node = self.state.graph.add_node(
+                    template.node_graph_label(user_state),
+                    template.user_data(user_state),
+                    |graph, node_id| template.build_node(graph, user_state, node_id),
+                );
+                self.state
+                    .node_positions
+                    .insert(new_node, self.state.node_finder.pos);
+                true
+            }
+            GraphMessage::NodeEvent(_) => false,
             GraphMessage::OpenNodeFinder(pos) => {
                 self.state.node_finder.is_showing = true;
                 self.state.node_finder.pos = pos;
+                true
             }
-            GraphMessage::CloseNodeFinder => self.state.node_finder.is_showing = false,
+            GraphMessage::CloseNodeFinder => {
+                self.state.node_finder.is_showing = false;
+                true
+            }
         }
-        true
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
         use GraphMessage::*;
@@ -84,6 +108,7 @@ where
                 is_showing={self.state.node_finder.is_showing}
                 pos={self.state.node_finder.pos}
                 user_state={user_state.clone()}
+                onevent={ctx.link().callback(|t| CreateNode(t))}
             />
             </>
         }
@@ -91,13 +116,15 @@ where
 }
 
 #[derive(PartialEq, Properties)]
-pub struct BasicNodeFinderProps<UserState>
+pub struct BasicNodeFinderProps<NodeTemplate, UserState>
 where
+    NodeTemplate: PartialEq,
     UserState: PartialEq,
 {
     pub is_showing: bool,
     pub pos: Vec2,
-    pub user_state: Rc<UserState>,
+    pub user_state: Rc<RefCell<UserState>>,
+    pub onevent: Callback<NodeTemplate>,
 }
 
 #[function_component(BasicNodeFinder)]
@@ -106,15 +133,23 @@ pub fn basic_finder<NodeTemplate, UserState>(
         is_showing,
         pos,
         user_state,
-    }: &BasicNodeFinderProps<UserState>,
+        onevent,
+    }: &BasicNodeFinderProps<NodeTemplate, UserState>,
 ) -> Html
 where
-    NodeTemplate: NodeTemplateTrait<UserState = UserState> + NodeTemplateIter<Item = NodeTemplate>,
+    NodeTemplate: NodeTemplateTrait<UserState = UserState>
+        + NodeTemplateIter<Item = NodeTemplate>
+        + PartialEq
+        + Copy
+        + 'static,
     UserState: PartialEq,
 {
+    let user_state = &mut *user_state.borrow_mut();
+
     let buttons = NodeTemplate::all_kinds().into_iter().map(|t| {
+        let onevent = onevent.clone();
         html! {
-            <li><button>{t.node_finder_label(&user_state)}</button></li>
+            <li><button onclick={move |_| onevent.emit(t)}>{t.node_finder_label(user_state)}</button></li>
         }
     });
     html! {

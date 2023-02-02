@@ -126,7 +126,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
     type ValueType = MyValueType;
     type UserState = MyGraphState;
 
-    fn node_finder_label(&self, _user_state: &Self::UserState) -> std::borrow::Cow<str> {
+    fn node_finder_label(&self, _user_state: &mut Self::UserState) -> std::borrow::Cow<str> {
         Cow::Borrowed(match self {
             MyNodeTemplate::MakeVector => "New vector",
             MyNodeTemplate::MakeScalar => "New scalar",
@@ -138,7 +138,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
         })
     }
 
-    fn node_graph_label(&self, user_state: &Self::UserState) -> String {
+    fn node_graph_label(&self, user_state: &mut Self::UserState) -> String {
         self.node_finder_label(user_state).into()
     }
 

@@ -27,7 +27,7 @@ pub fn node(
         })
     };
     let node = css! {r#"
-position:relative;
+position:absolute;
 user-select:none;
 display:inline-block;
 "#};
