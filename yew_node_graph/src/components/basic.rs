@@ -80,8 +80,13 @@ where
                 true
             }
             GraphMessage::CloseNodeFinder => {
-                self.state.node_finder.is_showing = false;
-                true
+                let is_showing = &mut self.state.node_finder.is_showing;
+                if *is_showing {
+                    *is_showing = false;
+                    true
+                } else {
+                    false
+                }
             }
         }
     }
