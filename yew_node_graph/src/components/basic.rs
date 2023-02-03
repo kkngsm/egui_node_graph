@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use crate::components::*;
-use crate::state::{GraphEditorState, NodeTemplateIter, NodeTemplateTrait};
+use crate::state::{GraphEditorState, NodeId, NodeTemplateIter, NodeTemplateTrait};
 use crate::{vec2, Vec2};
 use yew::prelude::*;
 /// Basic GraphEditor components
@@ -23,11 +23,13 @@ where
 }
 #[derive(Debug, Clone)]
 pub enum GraphMessage<NodeTemplate> {
+    SelectNode(NodeId),
+
+    // NodeFinder Event
+    OpenNodeFinder(Vec2),
     CreateNode(NodeTemplate),
 
-    NodeEvent(NodeEvent),
-    OpenNodeFinder(Vec2),
-    CloseNodeFinder,
+    BackgroundClick,
 }
 
 /// Props for [`BasicGraphEditor`]
@@ -62,6 +64,11 @@ where
         let BasicGraphEditorProps { user_state } = ctx.props();
         let user_state = &mut *user_state.borrow_mut();
         match msg {
+            GraphMessage::SelectNode(id) => {
+                self.state.selected_nodes.clear();
+                self.state.selected_nodes.insert(id);
+                true
+            }
             GraphMessage::CreateNode(template) => {
                 let new_node = self.state.graph.add_node(
                     template.node_graph_label(user_state),
@@ -73,34 +80,51 @@ where
                     .insert(new_node, self.state.node_finder.pos);
                 true
             }
-            GraphMessage::NodeEvent(_) => false,
             GraphMessage::OpenNodeFinder(pos) => {
                 self.state.node_finder.is_showing = true;
                 self.state.node_finder.pos = pos;
                 true
             }
-            GraphMessage::CloseNodeFinder => {
+            GraphMessage::BackgroundClick => {
+                let mut changed = false;
                 let is_showing = &mut self.state.node_finder.is_showing;
-                if *is_showing {
+                changed |= if *is_showing {
                     *is_showing = false;
                     true
                 } else {
                     false
-                }
+                };
+
+                changed |= if self.state.selected_nodes.is_empty() {
+                    false
+                } else {
+                    self.state.selected_nodes.clear();
+                    true
+                };
+                changed
             }
         }
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
         use GraphMessage::*;
         let BasicGraphEditorProps { user_state } = ctx.props();
-        let nodes = self.state.graph.nodes.iter().map(|(id, node)| html!{<Node title={node.label.clone()} pos={self.state.node_positions[id]}/>});
+        let nodes = self.state.graph.nodes.iter().map(|(id, node)| {
+            html! {<Node
+                title={node.label.clone()}
+                pos={self.state.node_positions[id]}
+                is_selected={self.state.selected_nodes.contains(&id)}
+                onevent={ctx.link().callback(move |e| match e{
+                    NodeEvent::MouseDown => SelectNode(id)
+                })}
+            />}
+        });
 
         let background_event = ctx.link().callback(|e: BackgroundEvent| match e {
             BackgroundEvent::ContextMenu(e) => {
                 let pos = vec2(e.client_x() as f32, e.client_y() as f32);
                 OpenNodeFinder(pos)
             }
-            BackgroundEvent::Click(_) => CloseNodeFinder,
+            BackgroundEvent::Click(_) => BackgroundClick,
         });
         html! {
             <>

@@ -1,5 +1,5 @@
 use super::*;
-use std::marker::PhantomData;
+use std::{collections::HashSet, marker::PhantomData};
 
 #[cfg(feature = "persistence")]
 use serde::{Deserialize, Serialize};
@@ -22,9 +22,9 @@ pub struct GraphEditorState<NodeData, DataType, ValueType, NodeTemplate, UserSta
     // /// An ongoing connection interaction: The mouse has dragged away from a
     // /// port and the user is holding the click
     // pub connection_in_progress: Option<(NodeId, AnyParameterId)>,
-    // /// The currently selected node. Some interface actions depend on the
-    // /// currently selected node.
-    // pub selected_nodes: Vec<NodeId>,
+    /// The currently selected node. Some interface actions depend on the
+    /// currently selected node.
+    pub selected_nodes: HashSet<NodeId>,
     // /// The mouse drag start position for an ongoing box selection.
     // pub ongoing_box_selection: Option<crate::Vec2>,
     /// The position of each node.
@@ -44,7 +44,7 @@ impl<NodeData, DataType, ValueType, NodeKind, UserState> Default
             graph: Default::default(),
             // node_order: Default::default(),
             // connection_in_progress: Default::default(),
-            // selected_nodes: Default::default(),
+            selected_nodes: Default::default(),
             // ongoing_box_selection: Default::default(),
             node_positions: Default::default(),
             node_finder: Default::default(),

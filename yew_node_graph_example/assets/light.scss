@@ -6,3 +6,7 @@
 .node{
     border: solid;
 }
+
+.node[data-is-selected="true"]{
+    border-color: red;
+}

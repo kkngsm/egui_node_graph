@@ -7,6 +7,8 @@ pub struct GraphProps {
 }
 #[styled_component(GraphArea)]
 pub fn graph_area(GraphProps { children, onevent }: &GraphProps) -> Html {
+    let oncontextmenu = onevent.clone();
+    let onclick = onevent.clone();
     let graph_area = css!(
         r#"
 position: relative;
@@ -16,24 +18,16 @@ overflow:hidden;
     html! {
         <div
             class={classes![graph_area,"graph-area"]}
-            oncontextmenu={stop_propagation(onevent.clone(), |e| BackgroundEvent::ContextMenu(e))}
-            onclick={stop_propagation(onevent.clone(), |e| BackgroundEvent::Click(e))}
+            oncontextmenu={move |e:MouseEvent| if let Some(c) = oncontextmenu.as_ref() {
+                e.prevent_default();
+                c.emit(BackgroundEvent::ContextMenu(e))
+            }}
+            onclick={move |e:MouseEvent| if let Some(c) = onclick.as_ref() {
+                c.emit(BackgroundEvent::Click(e))
+            }}
         >
             { for children.iter() }
         </div>
-    }
-}
-
-fn stop_propagation<WrappedEvent>(
-    callback: Option<Callback<WrappedEvent>>,
-    wrap: impl Fn(MouseEvent) -> WrappedEvent,
-) -> impl Fn(MouseEvent) {
-    move |e: MouseEvent| {
-        if let Some(c) = callback.as_ref() {
-            e.stop_propagation();
-            e.prevent_default();
-            c.emit(wrap(e))
-        }
     }
 }
 
