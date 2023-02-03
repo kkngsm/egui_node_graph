@@ -1,7 +1,6 @@
 use crate::Vec2;
 use stylist::yew::styled_component;
 use yew::prelude::*;
-
 #[derive(Properties, PartialEq)]
 pub struct NodeProps {
     pub title: String,
@@ -32,11 +31,8 @@ display:inline-block;
                 "node"
             ]}
             style={format!("left:{}px;top:{}px;", pos.x, pos.y)}
-            onmousedown={move |e:MouseEvent| if let Some(c) = onevent.as_ref(){
-                e.stop_propagation();
-                c.emit(NodeEvent::MouseDown);
-            }}
-            onclick={|e:MouseEvent| e.stop_propagation()}
+            onmousedown={on_select(onevent.clone())}
+            onclick={on_select(onevent.clone())}
             data-is-selected={is_selected.to_string()}
         >
             <div>{title}</div>
@@ -46,5 +42,19 @@ display:inline-block;
 
 #[derive(Debug, Clone, Copy)]
 pub enum NodeEvent {
-    MouseDown,
+    Select,
+    SelectWithShiftKey,
+}
+
+fn on_select(onevent: Option<Callback<NodeEvent>>) -> impl Fn(MouseEvent) {
+    move |e: MouseEvent| {
+        if let Some(c) = onevent.as_ref() {
+            e.stop_propagation();
+            if e.shift_key() {
+                c.emit(NodeEvent::SelectWithShiftKey)
+            } else {
+                c.emit(NodeEvent::Select)
+            }
+        }
+    }
 }

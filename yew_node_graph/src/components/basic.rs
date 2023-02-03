@@ -24,6 +24,7 @@ where
 #[derive(Debug, Clone)]
 pub enum GraphMessage<NodeTemplate> {
     SelectNode(NodeId),
+    SelectNodeWithShiftKey(NodeId),
 
     // NodeFinder Event
     OpenNodeFinder(Vec2),
@@ -66,6 +67,10 @@ where
         match msg {
             GraphMessage::SelectNode(id) => {
                 self.state.selected_nodes.clear();
+                self.state.selected_nodes.insert(id);
+                true
+            }
+            GraphMessage::SelectNodeWithShiftKey(id) => {
                 self.state.selected_nodes.insert(id);
                 true
             }
@@ -114,7 +119,8 @@ where
                 pos={self.state.node_positions[id]}
                 is_selected={self.state.selected_nodes.contains(&id)}
                 onevent={ctx.link().callback(move |e| match e{
-                    NodeEvent::MouseDown => SelectNode(id)
+                    NodeEvent::Select => SelectNode(id),
+                    NodeEvent::SelectWithShiftKey=> SelectNodeWithShiftKey(id)
                 })}
             />}
         });
