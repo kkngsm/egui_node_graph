@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::*;
 
 #[cfg(feature = "persistence")]
@@ -73,19 +75,25 @@ pub struct OutputParam<DataType> {
     pub typ: DataType,
 }
 
+/// The [`Node`]s of the graph
+pub type Nodes<NodeData> = Rc<SlotMap<NodeId, Rc<Node<NodeData>>>>;
+/// The [`InputParam`]s of the graph
+pub type InputParams<DataType, ValueType> =
+    Rc<SlotMap<InputId, Rc<InputParam<DataType, ValueType>>>>;
+/// The [`OutputParam`]s of the graph
+pub type OutputParams<DataType> = Rc<SlotMap<OutputId, Rc<OutputParam<DataType>>>>;
+// Connects the input of a node, to the output of its predecessor that
+// produces it
+pub type Connections = Rc<SecondaryMap<InputId, OutputId>>;
+
 /// The graph, containing nodes, input parameters and output parameters. Because
 /// graphs are full of self-referential structures, this type uses the `slotmap`
 /// crate to represent all the inner references in the data.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
 pub struct Graph<NodeData, DataType, ValueType> {
-    /// The [`Node`]s of the graph
-    pub nodes: SlotMap<NodeId, Node<NodeData>>,
-    /// The [`InputParam`]s of the graph
-    pub inputs: SlotMap<InputId, InputParam<DataType, ValueType>>,
-    /// The [`OutputParam`]s of the graph
-    pub outputs: SlotMap<OutputId, OutputParam<DataType>>,
-    // Connects the input of a node, to the output of its predecessor that
-    // produces it
-    pub connections: SecondaryMap<InputId, OutputId>,
+    pub nodes: Nodes<NodeData>,
+    pub inputs: InputParams<DataType, ValueType>,
+    pub outputs: OutputParams<DataType>,
+    pub connections: Connections,
 }
