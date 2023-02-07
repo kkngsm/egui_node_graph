@@ -17,14 +17,6 @@ pub mod index_impls;
 /// Implementing the main methods for the `Graph`
 pub mod graph_impls;
 
-/// The node finder is a tiny widget allowing to create new node types
-pub mod node_finder;
-pub use node_finder::*;
-
-// Information needed when dragging or selecting a node
-pub mod mouse_pos;
-pub use mouse_pos::*;
-
 /// Custom error types, crate-wide
 pub mod error;
 pub use error::*;

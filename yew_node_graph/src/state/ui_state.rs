@@ -1,58 +1,8 @@
-use super::*;
-use std::{collections::HashSet, marker::PhantomData};
-
-#[cfg(feature = "persistence")]
-use serde::{Deserialize, Serialize};
-
 #[derive(Default, Copy, Clone)]
-#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct PanZoom {
     pub pan: crate::Vec2,
     pub zoom: f32,
-}
-
-#[derive(Clone)]
-#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
-pub struct GraphEditorState<NodeData, DataType, ValueType, NodeTemplate, UserState> {
-    pub graph: Graph<NodeData, DataType, ValueType>,
-    //TODO
-    // /// Nodes are drawn in this order. Draw order is important because nodes
-    // /// that are drawn last are on top.
-    // pub node_order: Vec<NodeId>,
-    // /// An ongoing connection interaction: The mouse has dragged away from a
-    // /// port and the user is holding the click
-    // pub connection_in_progress: Option<(NodeId, AnyParameterId)>,
-    /// The currently selected node. Some interface actions depend on the
-    /// currently selected node.
-    pub selected_nodes: HashSet<NodeId>,
-    // /// The mouse drag start position for an ongoing box selection.
-    // pub ongoing_box_selection: Option<crate::Vec2>,
-    /// The position of each node.
-    pub node_positions: SecondaryMap<NodeId, crate::Vec2>,
-    /// The node finder is used to create new nodes.
-    pub node_finder: NodeFinder,
-    // /// The panning of the graph viewport.
-    // pub pan_zoom: PanZoom,
-    pub _user_state: PhantomData<fn() -> UserState>,
-    pub _template: PhantomData<fn() -> NodeTemplate>,
-}
-impl<NodeData, DataType, ValueType, NodeKind, UserState> Default
-    for GraphEditorState<NodeData, DataType, ValueType, NodeKind, UserState>
-{
-    fn default() -> Self {
-        Self {
-            graph: Default::default(),
-            // node_order: Default::default(),
-            // connection_in_progress: Default::default(),
-            selected_nodes: Default::default(),
-            // ongoing_box_selection: Default::default(),
-            node_positions: Default::default(),
-            node_finder: Default::default(),
-            // pan_zoom: Default::default(),
-            _user_state: Default::default(),
-            _template: Default::default(),
-        }
-    }
 }
 
 impl PanZoom {
@@ -69,4 +19,25 @@ impl PanZoom {
         self.zoom += zoom_delta;
         self.pan += point * zoom_delta;
     }
+}
+
+/// NodeFinder Status
+#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+pub struct NodeFinder {
+    pub pos: crate::Vec2,
+    pub is_showing: bool,
+}
+
+use glam::Vec2;
+
+use super::NodeId;
+
+// Information needed when dragging or selecting a node
+#[derive(Debug, Clone)]
+pub struct MousePosOnNode {
+    /// Id of mouse-on node
+    pub id: NodeId,
+    /// Position from top left of node
+    pub gap: Vec2,
 }
