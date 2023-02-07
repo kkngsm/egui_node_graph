@@ -15,13 +15,13 @@ pub fn graph_area(GraphProps { children, onevent }: &GraphProps) -> Html {
             "contextmenu",
             Box::new(on_event(onevent.clone(), |e| {
                 e.prevent_default();
-                BackgroundEvent::ContextMenu(get_offset_from_current_target(e))
+                BackgroundEvent::ContextMenu(get_offset_from_current_target(&e))
             })),
         ),
         (
             "click",
             Box::new(on_event(onevent.clone(), |e| {
-                BackgroundEvent::Click(get_offset_from_current_target(e))
+                BackgroundEvent::Click(get_offset_from_current_target(&e))
             })),
         ),
         // TODO: It would be better to add it to the Document,
@@ -30,7 +30,7 @@ pub fn graph_area(GraphProps { children, onevent }: &GraphProps) -> Html {
         (
             "mousemove",
             Box::new(on_event(onevent.clone(), |e| {
-                BackgroundEvent::Move(get_offset_from_current_target(e))
+                BackgroundEvent::Move(get_offset_from_current_target(&e))
             })),
         ),
     ]);

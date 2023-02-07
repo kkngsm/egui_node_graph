@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 slotmap::new_key_type! { pub struct NodeId; }
 slotmap::new_key_type! { pub struct InputId; }
 slotmap::new_key_type! { pub struct OutputId; }
@@ -33,5 +35,11 @@ impl From<OutputId> for AnyParameterId {
 impl From<InputId> for AnyParameterId {
     fn from(input: InputId) -> Self {
         Self::Input(input)
+    }
+}
+
+impl Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
     }
 }

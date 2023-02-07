@@ -4,9 +4,16 @@
 }
 
 .node{
-    border: solid;
 }
 
 .node[data-is-selected="true"]{
     border-color: red;
+}
+
+.port{
+    background-color: crimson;
+    border-color: crimson;
+    &:hover{
+        border-color: white;
+    }
 }

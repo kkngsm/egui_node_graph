@@ -27,7 +27,7 @@ pub fn get_offset_from_target(e: &MouseEvent) -> Vec2 {
     }
 }
 
-pub fn get_offset_from_current_target(e: MouseEvent) -> Vec2 {
+pub fn get_offset_from_current_target(e: &MouseEvent) -> Vec2 {
     if let Some(target) = e
         .current_target()
         .and_then(|event_target: web_sys::EventTarget| {

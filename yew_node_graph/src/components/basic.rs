@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -100,6 +100,7 @@ where
         + PartialEq
         + Copy
         + Debug,
+    DataType: Display,
 {
     type Message = GraphMessage<NodeTemplate>;
     type Properties = BasicGraphEditorProps<UserState>;
@@ -201,7 +202,7 @@ where
     fn view(&self, ctx: &Context<Self>) -> Html {
         use GraphMessage::*;
         let BasicGraphEditorProps { user_state } = ctx.props();
-        let nodes = self.graph.nodes.iter().map(|(id, node)| {
+        let nodes = self.graph.nodes.keys().map(|id| {
             let node_event = ctx.link().callback(move |e| match e {
                 NodeEvent::Select { shift_key } => SelectNode { id, shift_key },
                 NodeEvent::DragStart { gap, shift_key } => DragStart {
@@ -209,9 +210,11 @@ where
                     shift_key,
                 },
             });
-            html! {<Node
-                key={format!("{id:?}")}
-                title={node.label.clone()}
+            html! {<Node<NodeData, DataType, ValueType>
+                key={id.to_string()}
+                data={self.graph[id].clone()}
+                input_params={self.graph.inputs.clone()}
+                output_params={self.graph.outputs.clone()}
                 pos={self.node_positions[id]}
                 is_selected={self.selected_nodes.contains(&id)}
                 onevent={node_event}

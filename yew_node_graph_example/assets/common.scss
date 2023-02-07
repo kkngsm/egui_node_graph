@@ -1,7 +1,69 @@
+$port-size: 0.5em;
+$node-margin-x: 0.5em;
+$node-padding-y: 0.2em;
+$node-border: 0.1em;
+
+
+
+@use "sass:math";
+$ports-shift: math.div($node-border - $port-size, 2);
+
 .node-graph-contextmenu{
     border:1px solid #000;
     background-color:#fff;
 }
 .node-graph-contextmenu li *{
     cursor:pointer;
+    white-space: nowrap;
+}
+
+.node{
+    white-space: nowrap;
+    display: grid;
+    border: $node-border solid;
+    padding: $node-padding-y 0;
+    grid-template:
+        "title title title"
+        "input ui output";
+}
+
+.node-title{
+    grid-area: title;
+    margin: $node-padding-y $node-margin-x;
+}
+
+.ports{
+    &[data-io="input"]{
+        margin-left: $ports-shift;
+        grid-area: input;
+        .port-wrap{
+            justify-content: flex-start;
+        }
+    }
+    &[data-io="output"]{
+        margin-right: $ports-shift;
+        grid-area: output;
+        .port-wrap{
+            justify-content: flex-end;
+        }
+    }
+}
+
+.port-wrap{
+    display: flex;
+}
+
+.port-label{
+    display: inline-block;
+    margin: $node-margin-x + $ports-shift;
+}
+
+.port{
+    display: inline-block;
+    box-sizing: border-box;
+    width: $port-size;
+    height: $port-size;
+    border-radius: 50%;
+    border: 0.1em solid;
+    margin: auto;
 }
