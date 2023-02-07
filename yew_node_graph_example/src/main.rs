@@ -1,6 +1,7 @@
 use std::borrow::Cow;
+use yew::{function_component, html};
 use yew_node_graph::{
-    components::{BasicGraphEditor, BasicGraphEditorProps},
+    components::BasicGraphEditor,
     state::{
         DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId, NodeTemplateIter,
         NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
@@ -586,13 +587,16 @@ type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
 //     }
 // }
 
+#[function_component(App)]
+fn app() -> yew::Html {
+    let user_state = std::rc::Rc::new(std::cell::RefCell::new(MyGraphState::default()));
+    html! {
+        <div style={"padding:10rem"}><BasicGraphEditor<MyNodeData, MyDataType, MyValueType, MyNodeTemplate, MyGraphState> {user_state}/></div>
+    }
+}
+
 fn main() {
     wasm_logger::init(wasm_logger::Config::default());
-    let props = BasicGraphEditorProps {
-        user_state: Default::default(),
-    };
-    yew::Renderer::<
-        BasicGraphEditor<MyNodeData, MyDataType, MyValueType, MyNodeTemplate, MyGraphState>,
-    >::with_props(props)
-    .render();
+
+    yew::Renderer::<App>::new().render();
 }

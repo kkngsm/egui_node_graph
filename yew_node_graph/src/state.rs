@@ -21,6 +21,10 @@ pub mod graph_impls;
 pub mod node_finder;
 pub use node_finder::*;
 
+// Information needed when dragging or selecting a node
+pub mod mouse_pos;
+pub use mouse_pos::*;
+
 /// Custom error types, crate-wide
 pub mod error;
 pub use error::*;

@@ -8,6 +8,14 @@ pub struct ContextMenuProps {
     pub is_showing: bool,
     pub pos: Vec2,
 }
+
+/// ContextMenu component
+/// this components have `node-graph-contextmenu` class
+///
+/// # Default style
+/// ```css
+/// position:absolute;
+/// ```
 #[styled_component(ContextMenu)]
 pub fn contextmenu(
     ContextMenuProps {
@@ -21,7 +29,7 @@ pub fn contextmenu(
 display: {};
 left: {}px;
 top:{}px;
-position:fixed;
+position:absolute;
     ",
         if *is_showing { "block" } else { "none" },
         pos.x,

@@ -14,7 +14,20 @@ pub fn on_event<T>(
     }
 }
 
-pub fn get_offset(e: MouseEvent) -> Vec2 {
+pub fn get_offset_from_target(e: &MouseEvent) -> Vec2 {
+    if let Some(target) = e.target().and_then(|event_target: web_sys::EventTarget| {
+        event_target.dyn_into::<web_sys::Element>().ok()
+    }) {
+        let rect: web_sys::DomRect = target.get_bounding_client_rect();
+        let x = e.client_x() as f32 - rect.left() as f32;
+        let y = e.client_y() as f32 - rect.top() as f32;
+        vec2(x, y)
+    } else {
+        Vec2::ZERO
+    }
+}
+
+pub fn get_offset_from_current_target(e: MouseEvent) -> Vec2 {
     if let Some(target) = e
         .current_target()
         .and_then(|event_target: web_sys::EventTarget| {

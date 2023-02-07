@@ -1,14 +1,28 @@
-use crate::Vec2;
+use crate::{
+    utils::{get_offset_from_target, on_event},
+    Vec2,
+};
 use stylist::yew::styled_component;
 use yew::prelude::*;
 #[derive(Properties, PartialEq)]
 pub struct NodeProps {
     pub title: String,
-    pub onevent: Option<Callback<NodeEvent>>,
     pub pos: Vec2,
     #[prop_or_default]
     pub is_selected: bool,
+    pub onevent: Option<Callback<NodeEvent>>,
 }
+
+/// Node component
+/// if this node is selected, its html attribute `data-is-selected` is `true`
+/// this components have `node` class
+///
+/// # Default style
+/// ```css
+/// position:absolute;
+/// user-select:none;
+/// display:inline-block;
+/// ```
 #[styled_component(Node)]
 pub fn node(
     NodeProps {
@@ -18,7 +32,6 @@ pub fn node(
         is_selected,
     }: &NodeProps,
 ) -> Html {
-    let onevent = onevent.clone();
     let node = css! {r#"
 position:absolute;
 user-select:none;
@@ -31,30 +44,22 @@ display:inline-block;
                 "node"
             ]}
             style={format!("left:{}px;top:{}px;", pos.x, pos.y)}
-            onmousedown={on_select(onevent.clone())}
-            onclick={on_select(onevent.clone())}
             data-is-selected={is_selected.to_string()}
+            onclick={on_event(onevent.clone(), |e| {
+                e.stop_propagation();
+                NodeEvent::Select{shift_key: e.shift_key()}
+            })}
+            onmousedown = {on_event(onevent.clone(), |e: MouseEvent| {
+                NodeEvent::DragStart{gap: get_offset_from_target(&e), shift_key: e.shift_key()}
+            })}
         >
             <div>{title}</div>
         </div>
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum NodeEvent {
-    Select,
-    SelectWithShiftKey,
-}
-
-fn on_select(onevent: Option<Callback<NodeEvent>>) -> impl Fn(MouseEvent) {
-    move |e: MouseEvent| {
-        if let Some(c) = onevent.as_ref() {
-            e.stop_propagation();
-            if e.shift_key() {
-                c.emit(NodeEvent::SelectWithShiftKey)
-            } else {
-                c.emit(NodeEvent::Select)
-            }
-        }
-    }
+    DragStart { gap: Vec2, shift_key: bool },
+    Select { shift_key: bool },
 }
