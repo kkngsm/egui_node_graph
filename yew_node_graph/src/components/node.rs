@@ -2,11 +2,12 @@ use std::rc::Rc;
 
 use crate::{
     state::{InputId, InputParams, OutputId, OutputParams},
-    utils::{get_offset_from_current_target, on_event, use_event_listeners},
+    utils::{get_offset_from_current_target, use_event_listeners},
     Vec2,
 };
 use stylist::yew::styled_component;
 use yew::prelude::*;
+
 #[derive(Properties)]
 pub struct NodeProps<NodeData, DataType, ValueType> {
     pub data: Rc<crate::state::Node<NodeData>>,
@@ -16,7 +17,7 @@ pub struct NodeProps<NodeData, DataType, ValueType> {
     pub pos: Vec2,
     #[prop_or_default]
     pub is_selected: bool,
-    pub onevent: Option<Callback<NodeEvent>>,
+    pub onevent: Callback<NodeEvent>,
 }
 impl<NodeData, DataType, ValueType> PartialEq for NodeProps<NodeData, DataType, ValueType> {
     fn eq(&self, other: &Self) -> bool {
@@ -39,7 +40,7 @@ impl<NodeData, DataType, ValueType> PartialEq for NodeProps<NodeData, DataType, 
 /// user-select:none;
 /// ```
 #[styled_component(Node)]
-pub fn node<NodeData, DataType: ToString, ValueType>(
+pub fn node<NodeData, DataType, ValueType>(
     NodeProps {
         data,
         input_params,
@@ -48,7 +49,10 @@ pub fn node<NodeData, DataType: ToString, ValueType>(
         pos,
         is_selected,
     }: &NodeProps<NodeData, DataType, ValueType>,
-) -> Html {
+) -> Html
+where
+    DataType: ToString,
+{
     let input_ports = input_ports(&data.inputs, &input_params);
     let output_ports = output_ports(&data.outputs, &output_params);
     let node = css! {r#"
@@ -59,19 +63,27 @@ user-select:none;
     let node_ref = use_event_listeners([
         (
             "click",
-            Box::new(on_event(onevent.clone(), |e| {
-                e.stop_propagation();
-                NodeEvent::Select {
-                    shift_key: e.shift_key(),
+            Box::new({
+                let onevent = onevent.clone();
+                move |e| {
+                    e.stop_propagation();
+                    onevent.emit(NodeEvent::Select {
+                        shift_key: e.shift_key(),
+                    })
                 }
-            })),
+            }),
         ),
         (
             "mousedown",
-            Box::new(on_event(onevent.clone(), |e| NodeEvent::DragStart {
-                gap: get_offset_from_current_target(&e),
-                shift_key: e.shift_key(),
-            })),
+            Box::new({
+                let onevent = onevent.clone();
+                move |e| {
+                    onevent.emit(NodeEvent::DragStart {
+                        gap: get_offset_from_current_target(&e),
+                        shift_key: e.shift_key(),
+                    })
+                }
+            }),
         ),
     ]);
     html! {
