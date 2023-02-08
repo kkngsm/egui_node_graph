@@ -8,10 +8,12 @@ use crate::components::*;
 use crate::state::{
     Graph, MousePosOnNode, NodeFinder, NodeId, NodeTemplateIter, NodeTemplateTrait,
 };
+use crate::utils::get_offset_from_current_target;
 use crate::Vec2;
 use gloo::events::EventListener;
 use gloo::utils::window;
 use slotmap::SecondaryMap;
+use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use yew::prelude::*;
 /// Basic GraphEditor components
 /// The following limitations apply
@@ -55,7 +57,7 @@ where
 
     graph_ref: NodeRef,
 
-    _mouse_up_event: Option<EventListener>,
+    _drag_event: Option<[EventListener; 2]>,
 
     _user_state: PhantomData<fn() -> UserState>,
     _template: PhantomData<fn() -> NodeTemplate>,
@@ -115,7 +117,7 @@ where
             node_finder: Default::default(),
             mouse_on_node: Default::default(),
             graph_ref: Default::default(),
-            _mouse_up_event: Default::default(),
+            _drag_event: Default::default(),
             _user_state: PhantomData,
             _template: PhantomData,
         }
@@ -134,10 +136,25 @@ where
             }
             GraphMessage::DragStart { data, shift_key } => {
                 let document = window().document().unwrap();
-                let on_mouse_move = ctx.link().callback(|()| GraphMessage::DragEnd);
-                self._mouse_up_event = Some(EventListener::new(&document, "mouseup", move |_| {
-                    on_mouse_move.emit(())
-                }));
+                let onevent = ctx.link().callback(|msg: GraphMessage<_>| msg);
+
+                self._drag_event = Some([
+                    EventListener::new(&document, "mouseup", {
+                        let onevent = onevent.clone();
+                        move |_| onevent.emit(GraphMessage::DragEnd)
+                    }),
+                    EventListener::new(
+                        &self.graph_ref.cast::<web_sys::Element>().unwrap_throw(),
+                        "mousemove",
+                        {
+                            move |e| {
+                                let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
+                                onevent
+                                    .emit(GraphMessage::Dragging(get_offset_from_current_target(e)))
+                            }
+                        },
+                    ),
+                ]);
 
                 if !shift_key {
                     self.selected_nodes.clear();
@@ -163,7 +180,7 @@ where
                 }
             }
             GraphMessage::DragEnd => {
-                self._mouse_up_event = None;
+                self._drag_event = None;
                 self.mouse_on_node = None;
                 false
             }
@@ -233,8 +250,6 @@ where
         let background_event = ctx.link().callback(|e: BackgroundEvent| match e {
             BackgroundEvent::ContextMenu(pos) => OpenNodeFinder(pos),
             BackgroundEvent::Click(_) => BackgroundClick,
-            BackgroundEvent::Move(pos) => Dragging(pos),
-            BackgroundEvent::MouseUp(_) => DragEnd,
             BackgroundEvent::Rendered(node_ref) => Rendered(node_ref),
         });
 

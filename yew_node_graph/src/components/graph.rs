@@ -30,16 +30,6 @@ pub fn graph_area(GraphProps { children, onevent }: &GraphProps) -> Html {
                 move |e| onevent.emit(BackgroundEvent::Click(get_offset_from_current_target(&e)))
             }),
         ),
-        // TODO: It would be better to add it to the Document,
-        // but I don't know how to get the relative position of the mouse coordinates,
-        // so I'll do it later.
-        (
-            "mousemove",
-            Box::new({
-                let onevent = onevent.clone();
-                move |e| onevent.emit(BackgroundEvent::Move(get_offset_from_current_target(&e)))
-            }),
-        ),
     ]);
     use_effect_with_deps(
         {
@@ -70,8 +60,6 @@ position:relative;
 pub enum BackgroundEvent {
     ContextMenu(Vec2),
     Click(Vec2),
-    Move(Vec2),
-    MouseUp(Vec2),
 
     Rendered(NodeRef),
 }
