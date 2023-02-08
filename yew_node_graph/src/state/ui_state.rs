@@ -29,9 +29,12 @@ pub struct NodeFinder {
     pub is_showing: bool,
 }
 
-use glam::Vec2;
+use std::ops::Index;
 
-use super::NodeId;
+use glam::Vec2;
+use slotmap::SecondaryMap;
+
+use super::{AnyParameterId, InputId, NodeId, OutputId};
 
 // Information needed when dragging or selecting a node
 #[derive(Debug, Clone)]
@@ -40,4 +43,63 @@ pub struct MousePosOnNode {
     pub id: NodeId,
     /// Position from top left of node
     pub gap: Vec2,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PortPositions {
+    pub input: SecondaryMap<InputId, Vec2>,
+    pub output: SecondaryMap<OutputId, Vec2>,
+}
+
+impl PortPositions {
+    pub fn insert(&mut self, key: AnyParameterId, value: Vec2) -> Option<Vec2> {
+        match key {
+            AnyParameterId::Input(id) => self.input.insert(id, value),
+            AnyParameterId::Output(id) => self.output.insert(id, value),
+        }
+    }
+    pub fn remove(&mut self, key: AnyParameterId) -> Option<Vec2> {
+        match key {
+            AnyParameterId::Input(id) => self.input.remove(id),
+            AnyParameterId::Output(id) => self.output.remove(id),
+        }
+    }
+    pub fn get(&self, key: AnyParameterId) -> Option<&Vec2> {
+        match key {
+            AnyParameterId::Input(id) => self.input.get(id),
+            AnyParameterId::Output(id) => self.output.get(id),
+        }
+    }
+    pub fn get_mut(&mut self, key: AnyParameterId) -> Option<&mut Vec2> {
+        match key {
+            AnyParameterId::Input(id) => self.input.get_mut(id),
+            AnyParameterId::Output(id) => self.output.get_mut(id),
+        }
+    }
+}
+
+impl Index<InputId> for PortPositions {
+    type Output = Vec2;
+    fn index(&self, index: InputId) -> &Self::Output {
+        &self.input[index]
+    }
+}
+impl Index<OutputId> for PortPositions {
+    type Output = Vec2;
+    fn index(&self, index: OutputId) -> &Self::Output {
+        &self.output[index]
+    }
+}
+
+impl Index<AnyParameterId> for PortPositions {
+    type Output = Vec2;
+    fn index(&self, index: AnyParameterId) -> &Self::Output {
+        self.get(index).unwrap_or_else(|| {
+            panic!(
+                "{} index error for {:?}. Has the value been deleted?",
+                stringify!(AnyParameterId),
+                index
+            )
+        })
+    }
 }

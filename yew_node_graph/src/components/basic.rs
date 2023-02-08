@@ -100,7 +100,7 @@ where
         + PartialEq
         + Copy
         + Debug,
-    DataType: Display,
+    DataType: Display + PartialEq + Clone,
 {
     type Message = GraphMessage<NodeTemplate>;
     type Properties = BasicGraphEditorProps<UserState>;
@@ -209,6 +209,7 @@ where
                     data: MousePosOnNode { id, gap },
                     shift_key,
                 },
+                NodeEvent::Port(_) => None,
             });
             html! {<Node<NodeData, DataType, ValueType>
                 key={id.to_string()}

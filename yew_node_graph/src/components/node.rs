@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{fmt::Display, rc::Rc};
 
 use crate::{
     state::{InputId, InputParams, OutputId, OutputParams},
@@ -8,6 +8,7 @@ use crate::{
 use stylist::yew::styled_component;
 use yew::prelude::*;
 
+use super::{port::PortEvent, Port};
 #[derive(Properties)]
 pub struct NodeProps<NodeData, DataType, ValueType> {
     pub data: Rc<crate::state::Node<NodeData>>,
@@ -51,10 +52,10 @@ pub fn node<NodeData, DataType, ValueType>(
     }: &NodeProps<NodeData, DataType, ValueType>,
 ) -> Html
 where
-    DataType: ToString,
+    DataType: Display + Clone + PartialEq + 'static,
 {
-    let input_ports = input_ports(&data.inputs, &input_params);
-    let output_ports = output_ports(&data.outputs, &output_params);
+    let input_ports = input_ports(&data.inputs, &input_params, onevent.clone());
+    let output_ports = output_ports(&data.outputs, &output_params, onevent.clone());
     let node = css! {r#"
 position:absolute;
 user-select:none;
@@ -107,17 +108,26 @@ user-select:none;
 pub enum NodeEvent {
     DragStart { gap: Vec2, shift_key: bool },
     Select { shift_key: bool },
+    Port(PortEvent),
 }
 
-pub fn input_ports<DataType: ToString, ValueType>(
+pub fn input_ports<DataType, ValueType>(
     ports: &[(String, InputId)],
     graph: &InputParams<DataType, ValueType>,
-) -> Html {
+    onevent: Callback<NodeEvent>,
+) -> Html
+where
+    DataType: Display + PartialEq + Clone + 'static,
+{
     let ports = ports.iter().map(|(label, id)| {
-        let typ = &graph[*id].typ;
+        let id = *id;
+        let typ = graph[id].typ.clone();
+        let onevent = onevent.clone();
         html! {
             <div class={"port-wrap"}>
-                <div class={"port"} data-type={typ.to_string()}/>
+                <Port<InputId, DataType> {id} {typ} onevent={move |event| {
+                    onevent.emit(NodeEvent::Port(event))
+                }}/>
                 <div class={"port-label"}>{label}</div>
             </div>
         }
@@ -128,16 +138,25 @@ pub fn input_ports<DataType: ToString, ValueType>(
         </div>
     }
 }
-pub fn output_ports<DataType: ToString>(
+pub fn output_ports<DataType>(
     ports: &[(String, OutputId)],
     graph: &OutputParams<DataType>,
-) -> Html {
+    onevent: Callback<NodeEvent>,
+) -> Html
+where
+    DataType: Display + PartialEq + Clone + 'static,
+{
     let ports = ports.iter().map(|(label, id)| {
-        let typ = &graph[*id].typ;
+        let id = *id;
+        let typ = graph[id].typ.clone();
+        let onevent = onevent.clone();
         html! {
             <div class={"port-wrap"}>
                 <div class={"port-label"}>{label}</div>
-                <span class={"port"} data-type={typ.to_string()}/>
+                <Port<OutputId, DataType> {id} {typ} onevent={move |event| {
+                    onevent.emit(NodeEvent::Port(event))
+                }}
+                    />
             </div>
         }
     });

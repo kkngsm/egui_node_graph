@@ -1,7 +1,7 @@
 use glam::{vec2, Vec2};
 use wasm_bindgen::{closure::Closure, JsCast};
 use web_sys::MouseEvent;
-use yew::{hook, use_effect_with_deps, use_node_ref, Callback, NodeRef};
+use yew::{hook, use_effect_with_deps, use_node_ref, NodeRef};
 
 pub fn get_offset_from_target(e: &MouseEvent) -> Vec2 {
     if let Some(target) = e.target().and_then(|event_target: web_sys::EventTarget| {
