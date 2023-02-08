@@ -41,6 +41,15 @@ pub fn graph_area(GraphProps { children, onevent }: &GraphProps) -> Html {
             }),
         ),
     ]);
+    use_effect_with_deps(
+        {
+            let onevent = onevent.clone();
+            move |node_ref: &NodeRef| {
+                onevent.emit(BackgroundEvent::Rendered(node_ref.clone()));
+            }
+        },
+        node_ref.clone(),
+    );
     let graph_area = css!(
         r#"
 position:relative;
@@ -63,4 +72,6 @@ pub enum BackgroundEvent {
     Click(Vec2),
     Move(Vec2),
     MouseUp(Vec2),
+
+    Rendered(NodeRef),
 }

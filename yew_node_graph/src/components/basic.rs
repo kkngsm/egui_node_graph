@@ -53,6 +53,8 @@ where
     ///
     mouse_on_node: Option<MousePosOnNode>,
 
+    graph_ref: NodeRef,
+
     _mouse_up_event: Option<EventListener>,
 
     _user_state: PhantomData<fn() -> UserState>,
@@ -77,6 +79,7 @@ pub enum GraphMessage<NodeTemplate> {
     CreateNode(NodeTemplate),
 
     BackgroundClick,
+    Rendered(NodeRef),
 
     None,
 }
@@ -111,6 +114,7 @@ where
             node_positions: Default::default(),
             node_finder: Default::default(),
             mouse_on_node: Default::default(),
+            graph_ref: Default::default(),
             _mouse_up_event: Default::default(),
             _user_state: PhantomData,
             _template: PhantomData,
@@ -196,6 +200,10 @@ where
                 };
                 changed
             }
+            GraphMessage::Rendered(node_ref) => {
+                self.graph_ref = node_ref;
+                false
+            }
             GraphMessage::None => false,
         }
     }
@@ -227,6 +235,7 @@ where
             BackgroundEvent::Click(_) => BackgroundClick,
             BackgroundEvent::Move(pos) => Dragging(pos),
             BackgroundEvent::MouseUp(_) => DragEnd,
+            BackgroundEvent::Rendered(node_ref) => Rendered(node_ref),
         });
 
         html! {
