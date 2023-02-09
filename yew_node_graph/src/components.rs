@@ -1,5 +1,6 @@
 mod basic;
 mod contextmenu;
+mod edge;
 mod graph;
 mod node;
 mod port;

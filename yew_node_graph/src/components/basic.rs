@@ -4,16 +4,20 @@ use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use crate::components::port::PortEvent;
 use crate::components::*;
 use crate::state::{
-    Graph, MousePosOnNode, NodeFinder, NodeId, NodeTemplateIter, NodeTemplateTrait,
+    AnyParameterId, Graph, MousePosOnNode, NodeFinder, NodeId, NodeTemplateIter, NodeTemplateTrait,
+    PortPositions,
 };
 use crate::utils::get_offset_from_current_target;
 use crate::Vec2;
+use glam::vec2;
 use gloo::events::EventListener;
 use gloo::utils::window;
 use slotmap::SecondaryMap;
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
+use web_sys::Element;
 use yew::prelude::*;
 /// Basic GraphEditor components
 /// The following limitations apply
@@ -29,15 +33,14 @@ where
     NodeTemplate: 'static,
     UserState: 'static,
 {
-    pub graph: Graph<NodeData, DataType, ValueType>,
+    graph: Graph<NodeData, DataType, ValueType>,
     //TODO
     // /// Nodes are drawn in this order. Draw order is important because nodes
     // /// that are drawn last are on top.
     // pub node_order: Vec<NodeId>,
-
-    // /// An ongoing connection interaction: The mouse has dragged away from a
-    // /// port and the user is holding the click
-    // pub connection_in_progress: Option<(NodeId, AnyParameterId)>,
+    /// An ongoing connection interaction: The mouse has dragged away from a
+    /// port and the user is holding the click
+    connection_in_progress: Option<(AnyParameterId, Vec2)>,
     /// The currently selected node. Some interface actions depend on the
     /// currently selected node.
     selected_nodes: HashSet<NodeId>,
@@ -46,6 +49,8 @@ where
     // pub ongoing_box_selection: Option<crate::Vec2>,
     /// The position of each node.
     node_positions: SecondaryMap<NodeId, crate::Vec2>,
+
+    port_positions: PortPositions,
 
     /// The node finder is used to create new nodes.
     node_finder: NodeFinder,
@@ -81,7 +86,12 @@ pub enum GraphMessage<NodeTemplate> {
     CreateNode(NodeTemplate),
 
     BackgroundClick,
-    Rendered(NodeRef),
+
+    PortRendered {
+        id: AnyParameterId,
+        global_pos: Vec2,
+    },
+    GraphRendered(NodeRef),
 
     None,
 }
@@ -113,7 +123,9 @@ where
         Self {
             graph: Default::default(),
             selected_nodes: Default::default(),
+            connection_in_progress: Default::default(),
             node_positions: Default::default(),
+            port_positions: Default::default(),
             node_finder: Default::default(),
             mouse_on_node: Default::default(),
             graph_ref: Default::default(),
@@ -166,12 +178,17 @@ where
             GraphMessage::Dragging(pos) => {
                 if let Some(MousePosOnNode { id, gap }) = self.mouse_on_node {
                     let pos = pos - gap;
-                    let selected_pos = &mut self.node_positions[id];
-                    let drag_delta = pos - *selected_pos;
-                    *selected_pos = pos;
-                    for id_ in &self.selected_nodes {
-                        if &id != id_ {
-                            self.node_positions[*id_] += drag_delta;
+                    let selected_pos = self.node_positions[id];
+                    let drag_delta = pos - selected_pos;
+                    for id in &self.selected_nodes {
+                        let id = *id;
+                        self.node_positions[id] += drag_delta;
+                        let node = &*self.graph[id];
+                        for id in node.input_ids() {
+                            self.port_positions.input[id] += drag_delta;
+                        }
+                        for id in node.output_ids() {
+                            self.port_positions.output[id] += drag_delta;
                         }
                     }
                     true
@@ -217,8 +234,15 @@ where
                 };
                 changed
             }
-            GraphMessage::Rendered(node_ref) => {
+            GraphMessage::GraphRendered(node_ref) => {
                 self.graph_ref = node_ref;
+                false
+            }
+            GraphMessage::PortRendered { id, global_pos } => {
+                let element = self.graph_ref.cast::<Element>().unwrap();
+                let rect = element.get_bounding_client_rect();
+                let pos = global_pos - vec2(rect.left() as f32, rect.top() as f32);
+                self.port_positions.insert(id, pos);
                 false
             }
             GraphMessage::None => false,
@@ -234,7 +258,9 @@ where
                     data: MousePosOnNode { id, gap },
                     shift_key,
                 },
-                NodeEvent::Port(_) => None,
+                NodeEvent::Port(PortEvent::Rendered { id, global_pos }) => {
+                    PortRendered { id, global_pos }
+                }
             });
             html! {<Node<NodeData, DataType, ValueType>
                 key={id.to_string()}
@@ -250,7 +276,7 @@ where
         let background_event = ctx.link().callback(|e: BackgroundEvent| match e {
             BackgroundEvent::ContextMenu(pos) => OpenNodeFinder(pos),
             BackgroundEvent::Click(_) => BackgroundClick,
-            BackgroundEvent::Rendered(node_ref) => Rendered(node_ref),
+            BackgroundEvent::Rendered(node_ref) => GraphRendered(node_ref),
         });
 
         html! {
