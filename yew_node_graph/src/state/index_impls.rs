@@ -20,5 +20,5 @@ macro_rules! impl_index_traits {
 }
 
 impl_index_traits!(NodeId, Rc<Node<A>>, nodes);
-impl_index_traits!(InputId, Rc<InputParam<B, C>>, inputs);
-impl_index_traits!(OutputId, Rc<OutputParam<B>>, outputs);
+// impl_index_traits!(InputId, Rc<InputParam<B, C>>, inputs);
+// impl_index_traits!(OutputId, Rc<OutputParam<B>>, outputs);

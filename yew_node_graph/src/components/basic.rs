@@ -162,9 +162,7 @@ where
                 self.set_drag_event(ctx.link().callback(|msg| msg));
                 if let AnyParameterId::Input(input_id) = id {
                     if self.graph.connections.contains_key(input_id) {
-                        let output_id = Rc::make_mut(&mut self.graph.connections)
-                            .remove(input_id)
-                            .unwrap();
+                        let output_id = self.graph.connections.remove(input_id).unwrap();
                         self.connection_in_progress =
                             Some((output_id.into(), self.port_positions[input_id]));
                     } else {
@@ -183,16 +181,16 @@ where
                         AnyParameterId::Input(input_id) => self
                             .port_positions
                             .get_near_output(pos, 100.0)
-                            .and_then(|(output_id, pos)| {
-                                (self.graph[output_id].typ == self.graph[input_id].typ).then(|| pos)
-                            }),
+                            .map(|(output_id, pos)| (output_id, input_id, pos)),
                         AnyParameterId::Output(output_id) => self
                             .port_positions
                             .get_near_input(pos, 100.0)
-                            .and_then(|(input_id, pos)| {
-                                (self.graph[output_id].typ == self.graph[input_id].typ).then(|| pos)
-                            }),
-                    };
+                            .map(|(input_id, pos)| (output_id, input_id, pos)),
+                    }
+                    .and_then(|(output, input, pos)| {
+                        self.graph.param_typ_eq(output, input).then(|| pos)
+                    });
+
                     *p = nearest_port_pos.cloned().unwrap_or(pos);
                     true
 
@@ -234,8 +232,8 @@ where
                             .map(|(input, _)| (input, output)),
                     };
                     if let Some((input, output)) = nearest_port {
-                        if self.graph[input].typ == self.graph[output].typ {
-                            Rc::make_mut(&mut self.graph.connections).insert(input, output);
+                        if self.graph.param_typ_eq(output, input) {
+                            self.graph.connections.insert(input, output);
                         }
                     }
                 }
@@ -322,19 +320,23 @@ where
 
         let connection_in_progress = self.connection_in_progress.map(|(id, pos)| {
             let (output, input, typ) = match id {
-                AnyParameterId::Input(id) => {
-                    (pos, self.port_positions[id], self.graph[id].typ.clone())
-                }
-                AnyParameterId::Output(id) => {
-                    (self.port_positions[id], pos, self.graph[id].typ.clone())
-                }
+                AnyParameterId::Input(id) => (
+                    pos,
+                    self.port_positions[id],
+                    self.graph.inputs.borrow()[id].typ.clone(),
+                ),
+                AnyParameterId::Output(id) => (
+                    self.port_positions[id],
+                    pos,
+                    self.graph.outputs.borrow()[id].typ.clone(),
+                ),
             };
             html! {
                 <Edge<DataType> {output} {input} {typ}/>
             }
         });
         let edges = self.graph.iter_connections().map(|(input, output)| {
-            let typ = self.graph[input].typ.clone();
+            let typ = self.graph.input(input).typ.clone();
             let output = self.port_positions[output];
             let input = self.port_positions[input];
             html! {<Edge<DataType> key={output.to_string()} {output} {input} {typ} />}

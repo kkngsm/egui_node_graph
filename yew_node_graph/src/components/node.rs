@@ -113,7 +113,7 @@ pub enum NodeEvent {
 
 pub fn input_ports<DataType, ValueType>(
     ports: &[(String, InputId)],
-    graph: &InputParams<DataType, ValueType>,
+    params: &InputParams<DataType, ValueType>,
     onevent: Callback<NodeEvent>,
 ) -> Html
 where
@@ -121,7 +121,7 @@ where
 {
     let ports = ports.iter().map(|(label, id)| {
         let id = *id;
-        let typ = graph[id].typ.clone();
+        let typ = params.borrow()[id].typ.clone();
         let onevent = onevent.clone();
         html! {
             <div class={"port-wrap"}>
@@ -140,7 +140,7 @@ where
 }
 pub fn output_ports<DataType>(
     ports: &[(String, OutputId)],
-    graph: &OutputParams<DataType>,
+    params: &OutputParams<DataType>,
     onevent: Callback<NodeEvent>,
 ) -> Html
 where
@@ -148,7 +148,7 @@ where
 {
     let ports = ports.iter().map(|(label, id)| {
         let id = *id;
-        let typ = graph[id].typ.clone();
+        let typ = params.borrow()[id].typ.clone();
         let onevent = onevent.clone();
         html! {
             <div class={"port-wrap"}>
