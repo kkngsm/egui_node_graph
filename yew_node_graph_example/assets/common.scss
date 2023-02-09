@@ -2,8 +2,7 @@ $port-size: 0.5em;
 $node-margin-x: 0.5em;
 $node-padding-y: 0.2em;
 $node-border: 0.1em;
-
-
+$edge-stroke-width: $port-size * 0.5;
 
 @use "sass:math";
 $ports-shift: math.div($node-border - $port-size, 2);
@@ -66,4 +65,10 @@ $ports-shift: math.div($node-border - $port-size, 2);
     border-radius: 50%;
     border: 0.1em solid;
     margin: auto;
+}
+
+.edge{
+    stroke: #000;
+    stroke-width: $edge-stroke-width;
+    stroke-linecap: round;
 }

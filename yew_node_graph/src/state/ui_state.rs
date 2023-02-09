@@ -76,6 +76,22 @@ impl PortPositions {
             AnyParameterId::Output(id) => self.output.get_mut(id),
         }
     }
+
+    /// Return ports that are within the threshold
+    /// # Warning
+    /// - It is not the closest port of all, since it returns when a port is found with a distance less than or equal to the threshold value.
+    /// - For optimization, the threshold value is the square of the distance
+    pub fn get_near_input(&self, pos: Vec2, th: f32) -> Option<(InputId, &Vec2)> {
+        self.input
+            .iter()
+            .find(|(_, port_pos)| port_pos.distance_squared(pos) < th)
+    }
+    /// Output version of [`get_near_input`]
+    pub fn get_near_output(&self, pos: Vec2, th: f32) -> Option<(OutputId, &Vec2)> {
+        self.output
+            .iter()
+            .find(|(_, port_pos)| port_pos.distance_squared(pos) < th)
+    }
 }
 
 impl Index<InputId> for PortPositions {

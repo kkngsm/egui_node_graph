@@ -4,6 +4,7 @@ use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use crate::components::edge::Edge;
 use crate::components::port::PortEvent;
 use crate::components::*;
 use crate::state::{
@@ -74,7 +75,8 @@ pub enum GraphMessage<NodeTemplate> {
         shift_key: bool,
     },
 
-    DragStart {
+    DragStartPort(AnyParameterId),
+    DragStartNode {
         data: MousePosOnNode,
         shift_key: bool,
     },
@@ -146,27 +148,8 @@ where
                 self.selected_nodes.insert(id);
                 true
             }
-            GraphMessage::DragStart { data, shift_key } => {
-                let document = window().document().unwrap();
-                let onevent = ctx.link().callback(|msg: GraphMessage<_>| msg);
-
-                self._drag_event = Some([
-                    EventListener::new(&document, "mouseup", {
-                        let onevent = onevent.clone();
-                        move |_| onevent.emit(GraphMessage::DragEnd)
-                    }),
-                    EventListener::new(
-                        &self.graph_ref.cast::<web_sys::Element>().unwrap_throw(),
-                        "mousemove",
-                        {
-                            move |e| {
-                                let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
-                                onevent
-                                    .emit(GraphMessage::Dragging(get_offset_from_current_target(e)))
-                            }
-                        },
-                    ),
-                ]);
+            GraphMessage::DragStartNode { data, shift_key } => {
+                self.set_drag_event(ctx.link().callback(|msg| msg));
 
                 if !shift_key {
                     self.selected_nodes.clear();
@@ -175,8 +158,46 @@ where
                 self.mouse_on_node = Some(data);
                 false
             }
+            GraphMessage::DragStartPort(id) => {
+                self.set_drag_event(ctx.link().callback(|msg| msg));
+                if let AnyParameterId::Input(input_id) = id {
+                    if self.graph.connections.contains_key(input_id) {
+                        let output_id = Rc::make_mut(&mut self.graph.connections)
+                            .remove(input_id)
+                            .unwrap();
+                        self.connection_in_progress =
+                            Some((output_id.into(), self.port_positions[input_id]));
+                    } else {
+                        self.connection_in_progress = Some((id, self.port_positions[id]));
+                    }
+                } else {
+                    self.connection_in_progress = Some((id, self.port_positions[id]));
+                }
+                false
+            }
             GraphMessage::Dragging(pos) => {
-                if let Some(MousePosOnNode { id, gap }) = self.mouse_on_node {
+                // Connecting to p ort
+                if let Some((id, p)) = self.connection_in_progress.as_mut() {
+                    // snap to port
+                    let nearest_port_pos = match *id {
+                        AnyParameterId::Input(input_id) => self
+                            .port_positions
+                            .get_near_output(pos, 100.0)
+                            .and_then(|(output_id, pos)| {
+                                (self.graph[output_id].typ == self.graph[input_id].typ).then(|| pos)
+                            }),
+                        AnyParameterId::Output(output_id) => self
+                            .port_positions
+                            .get_near_input(pos, 100.0)
+                            .and_then(|(input_id, pos)| {
+                                (self.graph[output_id].typ == self.graph[input_id].typ).then(|| pos)
+                            }),
+                    };
+                    *p = nearest_port_pos.cloned().unwrap_or(pos);
+                    true
+
+                // Dragging node
+                } else if let Some(MousePosOnNode { id, gap }) = self.mouse_on_node {
                     let pos = pos - gap;
                     let selected_pos = self.node_positions[id];
                     let drag_delta = pos - selected_pos;
@@ -199,7 +220,26 @@ where
             GraphMessage::DragEnd => {
                 self._drag_event = None;
                 self.mouse_on_node = None;
-                false
+
+                // Connect to Port
+                if let Some((id, pos)) = self.connection_in_progress.take() {
+                    let nearest_port = match id {
+                        AnyParameterId::Input(input) => self
+                            .port_positions
+                            .get_near_output(pos, 100.0)
+                            .map(|(output, _)| (input, output)),
+                        AnyParameterId::Output(output) => self
+                            .port_positions
+                            .get_near_input(pos, 100.0)
+                            .map(|(input, _)| (input, output)),
+                    };
+                    if let Some((input, output)) = nearest_port {
+                        if self.graph[input].typ == self.graph[output].typ {
+                            Rc::make_mut(&mut self.graph.connections).insert(input, output);
+                        }
+                    }
+                }
+                true
             }
             GraphMessage::CreateNode(template) => {
                 let new_node = self.graph.add_node(
@@ -254,13 +294,14 @@ where
         let nodes = self.graph.nodes.keys().map(|id| {
             let node_event = ctx.link().callback(move |e| match e {
                 NodeEvent::Select { shift_key } => SelectNode { id, shift_key },
-                NodeEvent::DragStart { gap, shift_key } => DragStart {
+                NodeEvent::DragStart { gap, shift_key } => DragStartNode {
                     data: MousePosOnNode { id, gap },
                     shift_key,
                 },
                 NodeEvent::Port(PortEvent::Rendered { id, global_pos }) => {
                     PortRendered { id, global_pos }
                 }
+                NodeEvent::Port(PortEvent::MouseDown(id)) => DragStartPort(id),
             });
             html! {<Node<NodeData, DataType, ValueType>
                 key={id.to_string()}
@@ -279,11 +320,32 @@ where
             BackgroundEvent::Rendered(node_ref) => GraphRendered(node_ref),
         });
 
+        let connection_in_progress = self.connection_in_progress.map(|(id, pos)| {
+            let (output, input, typ) = match id {
+                AnyParameterId::Input(id) => {
+                    (pos, self.port_positions[id], self.graph[id].typ.clone())
+                }
+                AnyParameterId::Output(id) => {
+                    (self.port_positions[id], pos, self.graph[id].typ.clone())
+                }
+            };
+            html! {
+                <Edge<DataType> {output} {input} {typ}/>
+            }
+        });
+        let edges = self.graph.iter_connections().map(|(input, output)| {
+            let typ = self.graph[input].typ.clone();
+            let output = self.port_positions[output];
+            let input = self.port_positions[input];
+            html! {<Edge<DataType> key={output.to_string()} {output} {input} {typ} />}
+        });
         html! {
             <GraphArea
                 onevent={background_event}
             >
             {for nodes}
+            {for edges}
+            {connection_in_progress}
             <BasicNodeFinder<NodeTemplate, UserState>
                 is_showing={self.node_finder.is_showing}
                 pos={self.node_finder.pos}
@@ -292,6 +354,31 @@ where
             />
             </GraphArea>
         }
+    }
+}
+
+impl<NodeData, DataType, ValueType, NodeTemplate, UserState>
+    BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate, UserState>
+{
+    pub fn set_drag_event(&mut self, onevent: Callback<GraphMessage<NodeTemplate>>) {
+        let document = window().document().unwrap();
+
+        self._drag_event = Some([
+            EventListener::new(&document, "mouseup", {
+                let onevent = onevent.clone();
+                move |_| onevent.emit(GraphMessage::DragEnd)
+            }),
+            EventListener::new(
+                &self.graph_ref.cast::<web_sys::Element>().unwrap_throw(),
+                "mousemove",
+                {
+                    move |e| {
+                        let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
+                        onevent.emit(GraphMessage::Dragging(get_offset_from_current_target(e)))
+                    }
+                },
+            ),
+        ]);
     }
 }
 
