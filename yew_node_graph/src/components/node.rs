@@ -1,7 +1,7 @@
-use std::{fmt::Display, rc::Rc};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    state::{InputId, InputParams, OutputId, OutputParams},
+    state::{InputId, InputParams, NodeId, OutputId, OutputParams, WidgetValueTrait},
     utils::{get_offset_from_current_target, use_event_listeners},
     Vec2,
 };
@@ -10,7 +10,7 @@ use yew::prelude::*;
 
 use super::{port::PortEvent, Port};
 #[derive(Properties)]
-pub struct NodeProps<NodeData, DataType, ValueType> {
+pub struct NodeProps<NodeData, DataType, ValueType, UserState> {
     pub data: Rc<crate::state::Node<NodeData>>,
     pub input_params: InputParams<DataType, ValueType>,
     pub output_params: OutputParams<DataType>,
@@ -19,8 +19,11 @@ pub struct NodeProps<NodeData, DataType, ValueType> {
     #[prop_or_default]
     pub is_selected: bool,
     pub onevent: Callback<NodeEvent>,
+    pub user_state: Rc<RefCell<UserState>>,
 }
-impl<NodeData, DataType, ValueType> PartialEq for NodeProps<NodeData, DataType, ValueType> {
+impl<NodeData, DataType, ValueType, UserState> PartialEq
+    for NodeProps<NodeData, DataType, ValueType, UserState>
+{
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.data, &other.data)
             && Rc::ptr_eq(&self.input_params, &other.input_params)
@@ -28,6 +31,7 @@ impl<NodeData, DataType, ValueType> PartialEq for NodeProps<NodeData, DataType, 
             && self.pos == other.pos
             && self.is_selected == other.is_selected
             && self.onevent == other.onevent
+            && Rc::ptr_eq(&self.user_state, &other.user_state)
     }
 }
 
@@ -41,7 +45,7 @@ impl<NodeData, DataType, ValueType> PartialEq for NodeProps<NodeData, DataType, 
 /// user-select:none;
 /// ```
 #[styled_component(Node)]
-pub fn node<NodeData, DataType, ValueType>(
+pub fn node<NodeData, DataType, ValueType, UserState>(
     NodeProps {
         data,
         input_params,
@@ -49,12 +53,21 @@ pub fn node<NodeData, DataType, ValueType>(
         onevent,
         pos,
         is_selected,
-    }: &NodeProps<NodeData, DataType, ValueType>,
+        user_state,
+    }: &NodeProps<NodeData, DataType, ValueType, UserState>,
 ) -> Html
 where
     DataType: Display + Clone + PartialEq + 'static,
+    ValueType: WidgetValueTrait<UserState = UserState, NodeData = NodeData> + Clone,
 {
-    let input_ports = input_ports(&data.inputs, &input_params, onevent.clone());
+    let input_ports = input_ports(
+        &data.inputs,
+        &input_params,
+        data.id,
+        &data.user_data,
+        &mut *user_state.borrow_mut(),
+        onevent.clone(),
+    );
     let output_ports = output_ports(&data.outputs, &output_params, onevent.clone());
     let node = css! {r#"
 position:absolute;
@@ -111,24 +124,33 @@ pub enum NodeEvent {
     Port(PortEvent),
 }
 
-pub fn input_ports<DataType, ValueType>(
+pub fn input_ports<DataType, ValueType, NodeData, UserState>(
     ports: &[(String, InputId)],
-    params: &InputParams<DataType, ValueType>,
+    input_params: &InputParams<DataType, ValueType>,
+    node_id: NodeId,
+    node_data: &NodeData,
+    user_state: &mut UserState,
     onevent: Callback<NodeEvent>,
 ) -> Html
 where
     DataType: Display + PartialEq + Clone + 'static,
+    ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState> + Clone,
 {
-    let ports = ports.iter().map(|(label, id)| {
+    let ports = ports.iter().map(|(param_name, id)| {
         let id = *id;
-        let typ = params.borrow()[id].typ.clone();
+        let input_params = &input_params.borrow()[id];
+        let widget = input_params
+            .value
+            .value_widget(param_name, node_id, user_state, node_data);
         let onevent = onevent.clone();
         html! {
             <div class={"port-wrap"}>
-                <Port<InputId, DataType> {id} {typ} onevent={move |event| {
+                <Port<InputId, DataType> {id} typ={input_params.typ.clone()} onevent={move |event| {
                     onevent.emit(NodeEvent::Port(event))
                 }}/>
-                <div class={"port-label"}>{label}</div>
+                <div class={"port-widget"}>
+                    {widget}
+                </div>
             </div>
         }
     });
@@ -140,7 +162,7 @@ where
 }
 pub fn output_ports<DataType>(
     ports: &[(String, OutputId)],
-    params: &OutputParams<DataType>,
+    output_params: &OutputParams<DataType>,
     onevent: Callback<NodeEvent>,
 ) -> Html
 where
@@ -148,11 +170,11 @@ where
 {
     let ports = ports.iter().map(|(label, id)| {
         let id = *id;
-        let typ = params.borrow()[id].typ.clone();
+        let typ = output_params.borrow()[id].typ.clone();
         let onevent = onevent.clone();
         html! {
             <div class={"port-wrap"}>
-                <div class={"port-label"}>{label}</div>
+                <div class={"port-widget"}>{label}</div>
                 <Port<OutputId, DataType> {id} {typ} onevent={move |event| {
                     onevent.emit(NodeEvent::Port(event))
                 }}

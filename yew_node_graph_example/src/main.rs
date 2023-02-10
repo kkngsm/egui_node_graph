@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use yew::{function_component, html};
+use yew::{function_component, html, Html};
 use yew_node_graph::{
     components::BasicGraphEditor,
     state::{
@@ -271,36 +271,37 @@ impl WidgetValueTrait for MyValueType {
     type Response = MyResponse;
     type UserState = MyGraphState;
     type NodeData = MyNodeData;
-    // fn value_widget(
-    //     &mut self,
-    //     param_name: &str,
-    //     _node_id: NodeId,
-    //     ui: &mut egui::Ui,
-    //     _user_state: &mut MyGraphState,
-    //     _node_data: &MyNodeData,
-    // ) -> Vec<MyResponse> {
-    //     // This trait is used to tell the library which UI to display for the
-    //     // inline parameter widgets.
-    //     match self {
-    //         MyValueType::Vec2 { value } => {
-    //             ui.label(param_name);
-    //             ui.horizontal(|ui| {
-    //                 ui.label("x");
-    //                 ui.add(DragValue::new(&mut value.x));
-    //                 ui.label("y");
-    //                 ui.add(DragValue::new(&mut value.y));
-    //             });
-    //         }
-    //         MyValueType::Scalar { value } => {
-    //             UI.HORIZONTAL(|UI| {
-    //                 UI.LABEL(PARAM_NAME);
-    //                 UI.ADD(DRAGVALUE::NEW(VALUE));
-    //             });
-    //         }
-    //     }
-    //     // THIS ALLOWS YOU TO RETURN YOUR RESPONSES FROM THE INLINE WIDGETS.
-    //     VEC::NEW()
-    // }
+    fn value_widget(
+        &self,
+        param_name: &str,
+        _node_id: NodeId,
+        _user_state: &mut MyGraphState,
+        _node_data: &MyNodeData,
+    ) -> Html {
+        // This trait is used to tell the library which UI to display for the
+        // inline parameter widgets.
+        match self {
+            MyValueType::Vec2 { value } => {
+                html! {
+                    <>
+                    <div>{param_name}</div>
+                    <label>{"x"}</label>
+                    <input type="number"/>
+                    <label>{"y"}</label>
+                    <input type="number"/>
+                    </>
+                }
+            }
+            MyValueType::Scalar { value } => {
+                html! {
+                    <>
+                        <div>{param_name}</div>
+                        <input type="number"/>
+                    </>
+                }
+            }
+        }
+    }
 }
 
 impl UserResponseTrait for MyResponse {}

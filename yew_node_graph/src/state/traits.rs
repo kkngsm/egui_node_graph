@@ -1,3 +1,5 @@
+use yew::Html;
+
 use super::*;
 
 /// This trait must be implemented by the `ValueType` generic parameter of the
@@ -14,19 +16,17 @@ pub trait WidgetValueTrait: Default {
     type UserState;
     type NodeData;
 
-    //TODO
-    // /// This method will be called for each input parameter with a widget. The
-    // /// return value is a vector of custom response objects which can be used
-    // /// to implement handling of side effects. If unsure, the response Vec can
-    // /// be empty.
-    // fn value_widget(
-    //     &mut self,
-    //     param_name: &str,
-    //     node_id: NodeId,
-    //     ui: &mut egui::Ui,
-    //     user_state: &mut Self::UserState,
-    //     node_data: &Self::NodeData,
-    // ) -> Vec<Self::Response>;
+    /// This method will be called for each input parameter with a widget. The
+    /// return value is a vector of custom response objects which can be used
+    /// to implement handling of side effects. If unsure, the response Vec can
+    /// be empty.
+    fn value_widget(
+        &self,
+        param_name: &str,
+        node_id: NodeId,
+        user_state: &mut Self::UserState,
+        node_data: &Self::NodeData,
+    ) -> Html;
 }
 
 /// This trait must be implemented by the `DataType` generic parameter of the

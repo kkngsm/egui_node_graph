@@ -9,7 +9,7 @@ use crate::components::port::PortEvent;
 use crate::components::*;
 use crate::state::{
     AnyParameterId, Graph, MousePosOnNode, NodeFinder, NodeId, NodeTemplateIter, NodeTemplateTrait,
-    PortPositions,
+    PortPositions, WidgetValueTrait,
 };
 use crate::utils::get_offset_from_current_target;
 use crate::Vec2;
@@ -51,6 +51,7 @@ where
     /// The position of each node.
     node_positions: SecondaryMap<NodeId, crate::Vec2>,
 
+    /// The position of each port.
     port_positions: PortPositions,
 
     /// The node finder is used to create new nodes.
@@ -118,6 +119,7 @@ where
         + Copy
         + Debug,
     DataType: Display + PartialEq + Clone,
+    ValueType: WidgetValueTrait<UserState = UserState, NodeData = NodeData> + Clone,
 {
     type Message = GraphMessage<NodeTemplate>;
     type Properties = BasicGraphEditorProps<UserState>;
@@ -301,13 +303,14 @@ where
                 }
                 NodeEvent::Port(PortEvent::MouseDown(id)) => DragStartPort(id),
             });
-            html! {<Node<NodeData, DataType, ValueType>
+            html! {<Node<NodeData, DataType, ValueType, UserState>
                 key={id.to_string()}
                 data={self.graph[id].clone()}
                 input_params={self.graph.inputs.clone()}
                 output_params={self.graph.outputs.clone()}
                 pos={self.node_positions[id]}
                 is_selected={self.selected_nodes.contains(&id)}
+                {user_state}
                 onevent={node_event}
             />}
         });

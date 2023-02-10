@@ -249,17 +249,3 @@ impl<NodeData> Node<NodeData> {
             .ok_or_else(|| EguiGraphError::NoParameterNamed(self.id, name.into()))
     }
 }
-
-impl<DataType, ValueType> InputParam<DataType, ValueType> {
-    pub fn value(&self) -> &ValueType {
-        &self.value
-    }
-
-    pub fn kind(&self) -> InputParamKind {
-        self.kind
-    }
-
-    pub fn node(&self) -> NodeId {
-        self.node
-    }
-}
