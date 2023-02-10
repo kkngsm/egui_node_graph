@@ -163,8 +163,8 @@ where
             GraphMessage::DragStartPort(id) => {
                 self.set_drag_event(ctx.link().callback(|msg| msg));
                 if let AnyParameterId::Input(input_id) = id {
-                    if self.graph.connections.contains_key(input_id) {
-                        let output_id = self.graph.connections.remove(input_id).unwrap();
+                    if self.graph.connections().contains_key(input_id) {
+                        let output_id = self.graph.connections_mut().remove(input_id).unwrap();
                         self.connection_in_progress =
                             Some((output_id.into(), self.port_positions[input_id]));
                     } else {
@@ -235,7 +235,7 @@ where
                     };
                     if let Some((input, output)) = nearest_port {
                         if self.graph.param_typ_eq(output, input) {
-                            self.graph.connections.insert(input, output);
+                            self.graph.connections_mut().insert(input, output);
                         }
                     }
                 }
@@ -306,12 +306,13 @@ where
             html! {<Node<NodeData, DataType, ValueType, UserState>
                 key={id.to_string()}
                 data={self.graph[id].clone()}
-                input_params={self.graph.inputs.clone()}
-                output_params={self.graph.outputs.clone()}
                 pos={self.node_positions[id]}
                 is_selected={self.selected_nodes.contains(&id)}
-                {user_state}
                 onevent={node_event}
+                {user_state}
+                input_params={self.graph.inputs.clone()}
+                output_params={self.graph.outputs.clone()}
+                connections={self.graph.connections.clone()}
             />}
         });
 
@@ -338,9 +339,10 @@ where
                 <Edge<DataType> {output} {input} {typ}/>
             }
         });
-        let edges = self.graph.iter_connections().map(|(input, output)| {
+        let connections = self.graph.connections();
+        let edges = connections.iter().map(|(input, output)| {
             let typ = self.graph.input(input).typ.clone();
-            let output = self.port_positions[output];
+            let output = self.port_positions[*output];
             let input = self.port_positions[input];
             html! {<Edge<DataType> key={output.to_string()} {output} {input} {typ} />}
         });

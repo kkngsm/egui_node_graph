@@ -84,7 +84,7 @@ pub type InputParams<DataType, ValueType> =
 pub type OutputParams<DataType> = Rc<RefCell<SlotMap<OutputId, Rc<OutputParam<DataType>>>>>;
 // Connects the input of a node, to the output of its predecessor that
 // produces it
-pub type Connections = SecondaryMap<InputId, OutputId>;
+pub type Connections = Rc<RefCell<SecondaryMap<InputId, OutputId>>>;
 
 /// The graph, containing nodes, input parameters and output parameters. Because
 /// graphs are full of self-referential structures, this type uses the `slotmap`

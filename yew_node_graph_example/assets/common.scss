@@ -33,8 +33,6 @@ $ports-shift: math.div(-$port-size - $node-border, 2);
 }
 
 .ports{
-    display: flex;
-    flex-flow: column;
     &[data-io="input"]{
         margin-left: $ports-shift;
         grid-area: input;
@@ -50,7 +48,6 @@ $ports-shift: math.div(-$port-size - $node-border, 2);
         }
     }
 }
-
 .port-wrap{
     display: flex;
 }
@@ -66,7 +63,7 @@ $ports-shift: math.div(-$port-size - $node-border, 2);
     width: $port-size;
     height: $port-size;
     border-radius: 50%;
-    margin: auto;
+    margin: auto 0;
     &[data-is-should-draw="true"]{
         border: $port-border solid;
     }

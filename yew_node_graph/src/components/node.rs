@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    state::{InputId, InputParams, NodeId, OutputId, OutputParams, WidgetValueTrait},
+    state::{Connections, InputId, InputParams, NodeId, OutputId, OutputParams, WidgetValueTrait},
     utils::{get_offset_from_current_target, use_event_listeners},
     Vec2,
 };
@@ -12,13 +12,14 @@ use super::{port::PortEvent, Port};
 #[derive(Properties)]
 pub struct NodeProps<NodeData, DataType, ValueType, UserState> {
     pub data: Rc<crate::state::Node<NodeData>>,
-    pub input_params: InputParams<DataType, ValueType>,
-    pub output_params: OutputParams<DataType>,
-
     pub pos: Vec2,
     #[prop_or_default]
     pub is_selected: bool,
     pub onevent: Callback<NodeEvent>,
+
+    pub input_params: InputParams<DataType, ValueType>,
+    pub output_params: OutputParams<DataType>,
+    pub connections: Connections,
     pub user_state: Rc<RefCell<UserState>>,
 }
 impl<NodeData, DataType, ValueType, UserState> PartialEq
@@ -48,12 +49,13 @@ impl<NodeData, DataType, ValueType, UserState> PartialEq
 pub fn node<NodeData, DataType, ValueType, UserState>(
     NodeProps {
         data,
-        input_params,
-        output_params,
         onevent,
         pos,
         is_selected,
         user_state,
+        input_params,
+        output_params,
+        connections,
     }: &NodeProps<NodeData, DataType, ValueType, UserState>,
 ) -> Html
 where
@@ -62,13 +64,14 @@ where
 {
     let input_ports = input_ports(
         &data.inputs,
-        &input_params,
         data.id,
         &data.user_data,
-        &mut *user_state.borrow_mut(),
         onevent.clone(),
+        input_params,
+        connections,
+        &mut *user_state.borrow_mut(),
     );
-    let output_ports = output_ports(&data.outputs, &output_params, onevent.clone());
+    let output_ports = output_ports(&data.outputs, onevent.clone(), &output_params);
     let node = css! {r#"
 position:absolute;
 user-select:none;
@@ -126,22 +129,28 @@ pub enum NodeEvent {
 
 pub fn input_ports<DataType, ValueType, NodeData, UserState>(
     ports: &[(String, InputId)],
-    input_params: &InputParams<DataType, ValueType>,
     node_id: NodeId,
     node_data: &NodeData,
-    user_state: &mut UserState,
     onevent: Callback<NodeEvent>,
+    input_params: &InputParams<DataType, ValueType>,
+    connections: &Connections,
+    user_state: &mut UserState,
 ) -> Html
 where
     DataType: Display + PartialEq + Clone + 'static,
     ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState> + Clone,
 {
+    let connections = connections.borrow();
     let ports = ports.iter().map(|(param_name, id)| {
         let id = *id;
         let input_params = &input_params.borrow()[id];
-        let widget = input_params
-            .value
-            .value_widget(param_name, node_id, user_state, node_data);
+        let widget = if connections.contains_key(id) {
+            html! {param_name}
+        } else {
+            input_params
+                .value
+                .value_widget(param_name, node_id, user_state, node_data)
+        };
         let onevent = onevent.clone();
         html! {
             <div class={"port-wrap"}>
@@ -165,8 +174,8 @@ where
 }
 pub fn output_ports<DataType>(
     ports: &[(String, OutputId)],
-    output_params: &OutputParams<DataType>,
     onevent: Callback<NodeEvent>,
+    output_params: &OutputParams<DataType>,
 ) -> Html
 where
     DataType: Display + PartialEq + Clone + 'static,

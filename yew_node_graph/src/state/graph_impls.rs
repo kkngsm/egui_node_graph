@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    cell::{Ref, RefMut},
+    rc::Rc,
+};
 
 use super::*;
 
@@ -71,7 +74,7 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
             .inputs
             .retain(|(_, id)| *id != param);
         self.inputs.borrow_mut().remove(param);
-        self.connections.retain(|i, _| i != param);
+        self.connections_mut().retain(|i, _| i != param);
     }
 
     pub fn remove_output_param(&mut self, param: OutputId)
@@ -83,7 +86,7 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
             .outputs
             .retain(|(_, id)| *id != param);
         self.outputs.borrow_mut().remove(param);
-        self.connections.retain(|_, o| *o != param);
+        self.connections_mut().retain(|_, o| *o != param);
     }
 
     pub fn add_output_param(&mut self, node_id: NodeId, name: String, typ: DataType) -> OutputId
@@ -116,7 +119,7 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
     ) -> (Rc<Node<NodeData>>, Vec<(InputId, OutputId)>) {
         let mut disconnect_events = vec![];
 
-        self.connections.retain(|i, o| {
+        self.connections_mut().retain(|i, o| {
             if self.outputs.borrow()[*o].node == node_id || self.inputs.borrow()[i].node == node_id
             {
                 disconnect_events.push((i, *o));
@@ -138,7 +141,7 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
     }
 
     pub fn remove_connection(&mut self, input_id: InputId) -> Option<OutputId> {
-        self.connections.remove(input_id)
+        self.connections_mut().remove(input_id)
     }
 
     pub fn iter_nodes(&self) -> impl Iterator<Item = NodeId> + '_ {
@@ -146,14 +149,11 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
     }
 
     pub fn add_connection(&mut self, output: OutputId, input: InputId) {
-        self.connections.insert(input, output);
-    }
-    pub fn iter_connections(&self) -> impl Iterator<Item = (InputId, OutputId)> + '_ {
-        self.connections.iter().map(|(o, i)| (o, *i))
+        self.connections_mut().insert(input, output);
     }
 
     pub fn connection(&self, input: InputId) -> Option<OutputId> {
-        self.connections.get(input).copied()
+        self.connections().get(input).copied()
     }
 
     pub fn any_param_type(&self, param: AnyParameterId) -> Result<DataType, EguiGraphError>
@@ -183,6 +183,13 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
 
     pub fn output(&self, output: OutputId) -> Rc<OutputParam<DataType>> {
         self.outputs.borrow()[output].clone()
+    }
+
+    pub fn connections(&self) -> Ref<'_, SecondaryMap<InputId, OutputId>> {
+        self.connections.borrow()
+    }
+    pub fn connections_mut(&self) -> RefMut<'_, SecondaryMap<InputId, OutputId>> {
+        self.connections.borrow_mut()
     }
 
     pub fn param_typ_eq(&self, output: OutputId, input: InputId) -> bool

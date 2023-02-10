@@ -18,7 +18,7 @@ persistence = ["serde", "slotmap/serde", "smallvec/serde"]
 glam = {version = "0.22.0", features = ["serde"]}
 gloo = "0.8.0"
 log = "0.4.17"
-serde = {version = "1.0", optional = true, features = ["derive"]}
+serde = {version = "1.0", optional = true, features = ["derive", "rc"]}
 slotmap = {version = "1.0"}
 smallvec = {version = "1.7.0"}
 stylist = {version = "0.12", features = ["yew_integration", "yew"]}
