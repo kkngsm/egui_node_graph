@@ -1,11 +1,12 @@
 $port-size: 0.5em;
+$port-border: 0.1em;
 $node-margin-x: 0.5em;
 $node-padding-y: 0.2em;
-$node-border: 0.1em;
+$node-border: 0.2em;
 $edge-stroke-width: $port-size * 0.5;
 
 @use "sass:math";
-$ports-shift: math.div($node-border - $port-size, 2);
+$ports-shift: math.div(-$port-size - $node-border, 2);
 
 .node-graph-contextmenu{
     border:1px solid #000;
@@ -32,6 +33,8 @@ $ports-shift: math.div($node-border - $port-size, 2);
 }
 
 .ports{
+    display: flex;
+    flex-flow: column;
     &[data-io="input"]{
         margin-left: $ports-shift;
         grid-area: input;
@@ -52,7 +55,7 @@ $ports-shift: math.div($node-border - $port-size, 2);
     display: flex;
 }
 
-.port-label{
+.port-widget{
     display: inline-block;
     margin: $node-margin-x + $ports-shift;
 }
@@ -63,8 +66,10 @@ $ports-shift: math.div($node-border - $port-size, 2);
     width: $port-size;
     height: $port-size;
     border-radius: 50%;
-    border: 0.1em solid;
     margin: auto;
+    &[data-is-should-draw="true"]{
+        border: $port-border solid;
+    }
 }
 
 .edge{

@@ -145,7 +145,10 @@ where
         let onevent = onevent.clone();
         html! {
             <div class={"port-wrap"}>
-                <Port<InputId, DataType> {id} typ={input_params.typ.clone()} onevent={move |event| {
+                <Port<InputId, DataType> {id}
+                typ={input_params.typ.clone()}
+                is_should_draw={input_params.kind.is_should_draw()}
+                onevent={move |event| {
                     onevent.emit(NodeEvent::Port(event))
                 }}/>
                 <div class={"port-widget"}>
@@ -175,7 +178,7 @@ where
         html! {
             <div class={"port-wrap"}>
                 <div class={"port-widget"}>{label}</div>
-                <Port<OutputId, DataType> {id} {typ} onevent={move |event| {
+                <Port<OutputId, DataType> {id} {typ} is_should_draw={true} onevent={move |event| {
                     onevent.emit(NodeEvent::Port(event))
                 }}
                     />

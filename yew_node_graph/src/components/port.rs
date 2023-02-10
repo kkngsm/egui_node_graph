@@ -16,16 +16,25 @@ where
 {
     pub typ: DataType,
     pub id: PortId,
+    pub is_should_draw: bool,
     pub onevent: Callback<PortEvent>,
 }
 #[function_component(Port)]
-pub fn port<PortId, DataType>(PortProps { typ, id, onevent }: &PortProps<PortId, DataType>) -> Html
+pub fn port<PortId, DataType>(
+    PortProps {
+        typ,
+        id,
+        is_should_draw,
+        onevent,
+    }: &PortProps<PortId, DataType>,
+) -> Html
 where
     DataType: Display + PartialEq,
     PortId: Into<AnyParameterId> + PartialEq + Copy + 'static,
 {
     let id = *id;
     let node_ref = use_node_ref();
+    let is_should_draw = *is_should_draw;
     use_effect_with_deps(
         {
             let onevent = onevent.clone();
@@ -44,12 +53,15 @@ where
         <div
             onmousedown={{
                 let onevent = onevent.clone();
-                move|e:MouseEvent| {
-                    e.stop_propagation();
-                    onevent.emit(PortEvent::MouseDown(id.into()))}}}
+                move|e:MouseEvent| if is_should_draw{
+                        e.stop_propagation();
+                        onevent.emit(PortEvent::MouseDown(id.into()))
+                }
+            }}
             ref={node_ref}
             class={"port"}
             data-type={typ.to_string()}
+            data-is-should-draw={is_should_draw.to_string()}
         />
     }
 }

@@ -23,24 +23,23 @@ $reddish_purple:rgb(204, 121, 167);
 }
 
 .port{
-    background-color: black;
-    border-color: black;
-    &:hover{
-        border-color: white;
+    &[data-is-should-draw="true"]{
+        &[data-type="Scalar"]{
+            background-color: $skyblue;
+            border-color: $skyblue;
+        }
+        &[data-type="Vec2"] {
+            background-color: $reddish_purple;
+            border-color: $reddish_purple;
+        }
+        &:hover{
+            border-color: white;
+        }
     }
-}
 
-.port[data-type="Scalar"]{
-    background-color: $skyblue;
-    border-color: $skyblue;
 }
 .edge[data-type="Scalar"]{
     stroke: $skyblue;
-}
-
-.port[data-type="Vec2"] {
-    background-color: $reddish_purple;
-    border-color: $reddish_purple;
 }
 .edge[data-type="Vec2"]{
     stroke: $reddish_purple;

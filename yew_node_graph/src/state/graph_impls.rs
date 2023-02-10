@@ -249,3 +249,13 @@ impl<NodeData> Node<NodeData> {
             .ok_or_else(|| EguiGraphError::NoParameterNamed(self.id, name.into()))
     }
 }
+
+impl InputParamKind {
+    pub fn is_should_draw(&self) -> bool {
+        match self {
+            InputParamKind::ConnectionOnly => true,
+            InputParamKind::ConstantOnly => false,
+            InputParamKind::ConnectionOrConstant => true,
+        }
+    }
+}
