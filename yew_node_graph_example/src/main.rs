@@ -1,4 +1,6 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, cell::RefCell, rc::Rc};
+use wasm_bindgen::{JsCast, UnwrapThrowExt};
+use web_sys::{HtmlInputElement, InputEvent};
 use yew::{function_component, html, Html};
 use yew_node_graph::{
     components::BasicGraphEditor,
@@ -8,7 +10,6 @@ use yew_node_graph::{
     },
     *,
 };
-
 // ========= First, define your user data types =============
 
 /// The NodeData holds a custom data struct inside each node. It's useful to
@@ -42,26 +43,18 @@ impl std::fmt::Display for MyDataType {
 /// this library makes no attempt to check this consistency. For instance, it is
 /// up to the user code in this example to make sure no parameter is created
 /// with a DataType of Scalar and a ValueType of Vec2.
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum MyValueType {
-    Vec2 { value: Vec2 },
-    Scalar { value: f32 },
-}
-
-impl Default for MyValueType {
-    fn default() -> Self {
-        // NOTE: This is just a dummy `Default` implementation. The library
-        // requires it to circumvent some internal borrow checker issues.
-        Self::Scalar { value: 0.0 }
-    }
+    Vec2 { value: Rc<RefCell<Vec2>> },
+    Scalar { value: Rc<RefCell<f32>> },
 }
 
 impl MyValueType {
     /// Tries to downcast this value type to a vector
     pub fn try_to_vec2(self) -> anyhow::Result<Vec2> {
         if let MyValueType::Vec2 { value } = self {
-            Ok(value)
+            Ok(value.borrow().to_owned())
         } else {
             anyhow::bail!("Invalid cast from {:?} to vec2", self)
         }
@@ -70,7 +63,7 @@ impl MyValueType {
     /// Tries to downcast this value type to a scalar
     pub fn try_to_scalar(self) -> anyhow::Result<f32> {
         if let MyValueType::Scalar { value } = self {
-            Ok(value)
+            Ok(value.borrow().to_owned())
         } else {
             anyhow::bail!("Invalid cast from {:?} to scalar", self)
         }
@@ -168,7 +161,9 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 node_id,
                 name.to_string(),
                 MyDataType::Scalar,
-                MyValueType::Scalar { value: 0.0 },
+                MyValueType::Scalar {
+                    value: Rc::new(RefCell::new(0.0)),
+                },
                 InputParamKind::ConnectionOrConstant,
                 true,
             );
@@ -179,7 +174,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 name.to_string(),
                 MyDataType::Vec2,
                 MyValueType::Vec2 {
-                    value: vec2(0.0, 0.0),
+                    value: Rc::new(RefCell::new(vec2(0.0, 0.0))),
                 },
                 InputParamKind::ConnectionOrConstant,
                 true,
@@ -205,7 +200,9 @@ impl NodeTemplateTrait for MyNodeTemplate {
                     // The data type for this input. In this case, a scalar
                     MyDataType::Scalar,
                     // The value type for this input. We store zero as default
-                    MyValueType::Scalar { value: 0.0 },
+                    MyValueType::Scalar {
+                        value: Rc::new(RefCell::new(0.0)),
+                    },
                     // The input parameter kind. This allows defining whether a
                     // parameter accepts input connections and/or an inline
                     // widget to set its value.
@@ -278,25 +275,54 @@ impl WidgetValueTrait for MyValueType {
         _user_state: &mut MyGraphState,
         _node_data: &MyNodeData,
     ) -> Html {
+        fn get_value(e: InputEvent) -> f32 {
+            let event_target = e.target().unwrap();
+            let target: HtmlInputElement = event_target.dyn_into().unwrap_throw();
+            target.value_as_number() as f32
+        }
         // This trait is used to tell the library which UI to display for the
         // inline parameter widgets.
         match self {
             MyValueType::Vec2 { value } => {
+                let v = value.borrow();
+                let x = v.x;
+                let y = v.y;
                 html! {
                     <>
                     <div>{param_name}</div>
                     <label>{"x"}</label>
-                    <input type="number"/>
+                    <input type="number"
+                        value={x.to_string()}
+                        oninput={{
+                            let value = value.clone();
+                            move |e: InputEvent| value.borrow_mut().x = get_value(e)
+                        }}
+                    />
                     <label>{"y"}</label>
-                    <input type="number"/>
+                    <input type="number"
+                        value={y.to_string()}
+                        oninput={{
+                            let value = value.clone();
+                            move |e: InputEvent| value.borrow_mut().y = get_value(e)
+                        }}
+                    />
                     </>
                 }
             }
             MyValueType::Scalar { value } => {
+                let v = *value.borrow();
                 html! {
                     <>
                         <div>{param_name}</div>
-                        <input type="number"/>
+                        <input type="number"
+                            value={v.to_string()}
+                            oninput={{
+                                let value = value.clone();
+                                move |e: InputEvent| {
+                                    *value.borrow_mut() = get_value(e)
+                                }
+                            }}
+                        />
                     </>
                 }
             }
