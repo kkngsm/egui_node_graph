@@ -17,14 +17,18 @@ $port-shift: math.div(-$port-size - $node-border, 2);
     display: grid;
     border: $node-border solid;
     grid-template:
-        "title"
-        "input"
-        "output"
-        "ui";
+        "title delete"
+        "input input"
+        "output output"
+        "ui ui";
 }
 
 .node-title{
     grid-area: title;
+}
+
+.node-delete{
+    grid-area: delete;
 }
 
 .ports{
@@ -78,6 +82,9 @@ $port-shift: math.div(-$port-size - $node-border, 2);
 
 .node-title{
     padding: 0.25em $node-padding-x;
+}
+.node-delete{
+    margin-left: 1em;
 }
 
 .ports{

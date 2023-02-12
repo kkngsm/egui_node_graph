@@ -83,6 +83,9 @@ pub enum GraphMessage<NodeTemplate> {
         id: NodeId,
         shift_key: bool,
     },
+    DeleteNode {
+        id: NodeId,
+    },
 
     DragStartPort(AnyParameterId),
     DragStartNode {
@@ -152,9 +155,12 @@ where
                 self.selected_nodes.insert(id);
                 true
             }
+            GraphMessage::DeleteNode { id } => {
+                let (_node, _disc_events) = self.graph.remove_node(id);
+                true
+            }
             GraphMessage::DragStartNode { data, shift_key } => {
                 self.set_drag_event(ctx.link().callback(|msg| msg));
-
                 if !shift_key {
                     self.selected_nodes.clear();
                 }
@@ -330,6 +336,7 @@ where
         let nodes = self.graph.nodes.keys().map(|id| {
             let node_event = ctx.link().callback(move |e| match e {
                 NodeEvent::Select { shift_key } => SelectNode { id, shift_key },
+                NodeEvent::Delete => DeleteNode { id },
                 NodeEvent::DragStart { gap, shift_key } => DragStartNode {
                     data: MousePosOnNode { id, gap },
                     shift_key,

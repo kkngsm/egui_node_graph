@@ -136,7 +136,16 @@ user-select:none;
             style={format!("left:{}px;top:{}px;", pos.x, pos.y)}
             data-is-selected={is_selected.to_string()}
         >
-            <div class={"node-title"}>{&data.label}</div>
+            <div class={"node-title"}>{&data.label}
+            <button class={"node-delete"}
+                onclick={
+                {let onevent = onevent.clone();
+                move  |e: MouseEvent|{
+                    e.stop_propagation();
+                    onevent.emit(NodeEvent::Delete)
+                }}}
+            >{"×"}</button>
+            </div>
             {input_ports}
             {output_ports}
         </div>
@@ -147,6 +156,7 @@ user-select:none;
 pub enum NodeEvent {
     DragStart { gap: Vec2, shift_key: bool },
     Select { shift_key: bool },
+    Delete,
     Port(PortEvent),
 }
 
