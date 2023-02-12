@@ -1,4 +1,3 @@
-
 // Bang Wong's color template
 // https://rdcu.be/c5bHt
 $black: rgb(0, 0, 0);
@@ -11,15 +10,16 @@ $vermillion:rgb(213, 94, 0);
 $reddish_purple:rgb(204, 121, 167);
 
 .graph-area{
-    background-color: gainsboro;
+    background-color: #EEE;
     height: 100vh;
 }
 
 .node{
+    background-color: gainsboro;
 }
 
 .node[data-is-selected="true"]{
-    border-color: red;
+    border-color:  white;
 }
 
 .port{

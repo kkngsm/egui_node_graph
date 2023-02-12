@@ -3,7 +3,7 @@ use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use web_sys::{HtmlInputElement, InputEvent};
 use yew::{function_component, html, Html};
 use yew_node_graph::{
-    components::BasicGraphEditor,
+    components::basic::BasicGraphEditor,
     state::{
         DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId, NodeTemplateIter,
         NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
@@ -32,7 +32,7 @@ pub enum MyDataType {
 }
 impl std::fmt::Display for MyDataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -265,7 +265,7 @@ impl NodeTemplateIter for MyNodeTemplate {
 }
 
 impl WidgetValueTrait for MyValueType {
-    type Response = MyResponse;
+    // type Response = MyResponse;
     type UserState = MyGraphState;
     type NodeData = MyNodeData;
     fn value_widget(

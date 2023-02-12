@@ -6,39 +6,42 @@ use crate::utils::{get_offset_from_current_target, use_event_listeners};
 #[derive(Properties, PartialEq)]
 pub struct GraphProps {
     pub children: Children,
+    pub node_ref: NodeRef,
     pub onevent: Callback<BackgroundEvent>,
 }
 #[styled_component(GraphArea)]
-pub fn graph_area(GraphProps { children, onevent }: &GraphProps) -> Html {
-    let node_ref = use_event_listeners([
-        (
-            "contextmenu",
-            Box::new({
-                let onevent = onevent.clone();
-                move |e| {
-                    e.prevent_default();
-                    onevent.emit(BackgroundEvent::ContextMenu(
-                        get_offset_from_current_target(&e),
-                    ))
-                }
-            }),
-        ),
-        (
-            "click",
-            Box::new({
-                let onevent = onevent.clone();
-                move |e| onevent.emit(BackgroundEvent::Click(get_offset_from_current_target(&e)))
-            }),
-        ),
-    ]);
-    use_effect_with_deps(
-        {
-            let onevent = onevent.clone();
-            move |node_ref: &NodeRef| {
-                onevent.emit(BackgroundEvent::Rendered(node_ref.clone()));
-            }
-        },
+pub fn graph_area(
+    GraphProps {
+        children,
+        onevent,
+        node_ref,
+    }: &GraphProps,
+) -> Html {
+    use_event_listeners(
         node_ref.clone(),
+        [
+            (
+                "contextmenu",
+                Box::new({
+                    let onevent = onevent.clone();
+                    move |e| {
+                        e.prevent_default();
+                        onevent.emit(BackgroundEvent::ContextMenu(
+                            get_offset_from_current_target(&e),
+                        ))
+                    }
+                }),
+            ),
+            (
+                "click",
+                Box::new({
+                    let onevent = onevent.clone();
+                    move |e| {
+                        onevent.emit(BackgroundEvent::Click(get_offset_from_current_target(&e)))
+                    }
+                }),
+            ),
+        ],
     );
     let graph_area = css!(
         r#"
@@ -60,6 +63,4 @@ position:relative;
 pub enum BackgroundEvent {
     ContextMenu(Vec2),
     Click(Vec2),
-
-    Rendered(NodeRef),
 }

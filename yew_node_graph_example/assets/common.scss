@@ -1,17 +1,12 @@
-$port-size: 0.5em;
-$port-border: 0.1em;
-$node-margin-x: 0.5em;
-$node-padding-y: 0.2em;
+$port-size: 0.7em;
+$port-border: 0.2em;
 $node-border: 0.2em;
+$node-padding-x: 0.6em;
 $edge-stroke-width: $port-size * 0.5;
 
 @use "sass:math";
-$ports-shift: math.div(-$port-size - $node-border, 2);
+$port-shift: math.div(-$port-size - $node-border, 2);
 
-.node-graph-contextmenu{
-    border:1px solid #000;
-    background-color:#fff;
-}
 .node-graph-contextmenu li *{
     cursor:pointer;
     white-space: nowrap;
@@ -21,30 +16,34 @@ $ports-shift: math.div(-$port-size - $node-border, 2);
     white-space: nowrap;
     display: grid;
     border: $node-border solid;
-    padding: $node-padding-y 0;
     grid-template:
-        "title title title"
-        "input ui output";
+        "title"
+        "input"
+        "output"
+        "ui";
 }
 
 .node-title{
     grid-area: title;
-    margin: $node-padding-y $node-margin-x;
 }
 
 .ports{
     &[data-io="input"]{
-        margin-left: $ports-shift;
         grid-area: input;
         .port-wrap{
             justify-content: flex-start;
         }
+        .port{
+            left: $port-shift;
+        }
     }
     &[data-io="output"]{
-        margin-right: $ports-shift;
         grid-area: output;
         .port-wrap{
             justify-content: flex-end;
+        }
+        .port{
+            right: $port-shift;
         }
     }
 }
@@ -54,7 +53,6 @@ $ports-shift: math.div(-$port-size - $node-border, 2);
 
 .port-widget{
     display: inline-block;
-    margin: $node-margin-x + $ports-shift;
 }
 
 .port{
@@ -67,10 +65,26 @@ $ports-shift: math.div(-$port-size - $node-border, 2);
     &[data-is-should-draw="true"]{
         border: $port-border solid;
     }
+    position: absolute;
+    margin: calc(0.5em - #{$port-size} / 2) 0;
 }
 
 .edge{
-    stroke: #000;
     stroke-width: $edge-stroke-width;
     stroke-linecap: round;
+}
+
+// ------------------------------------------
+
+.node-title{
+    padding: 0.25em $node-padding-x;
+}
+
+.ports{
+    padding: 0.25em $node-padding-x;
+}
+
+.node-graph-contextmenu{
+    border:1px solid #000;
+    background-color:#fff;
 }

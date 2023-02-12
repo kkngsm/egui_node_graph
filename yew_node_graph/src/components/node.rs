@@ -8,7 +8,15 @@ use crate::{
 use stylist::yew::styled_component;
 use yew::prelude::*;
 
-use super::{port::PortEvent, Port};
+use super::{
+    basic::PortsRef,
+    port::{
+        widget::{InputWidget, OutputWidget},
+        wrap::PortWrap,
+        Port, PortEvent,
+    },
+};
+
 #[derive(Properties)]
 pub struct NodeProps<NodeData, DataType, ValueType, UserState> {
     pub data: Rc<crate::state::Node<NodeData>>,
@@ -20,6 +28,7 @@ pub struct NodeProps<NodeData, DataType, ValueType, UserState> {
     pub input_params: InputParams<DataType, ValueType>,
     pub output_params: OutputParams<DataType>,
     pub connections: Connections,
+    pub ports_ref: PortsRef,
     pub user_state: Rc<RefCell<UserState>>,
 }
 impl<NodeData, DataType, ValueType, UserState> PartialEq
@@ -27,12 +36,14 @@ impl<NodeData, DataType, ValueType, UserState> PartialEq
 {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.data, &other.data)
-            && Rc::ptr_eq(&self.input_params, &other.input_params)
-            && Rc::ptr_eq(&self.output_params, &other.output_params)
             && self.pos == other.pos
             && self.is_selected == other.is_selected
             && self.onevent == other.onevent
-            && Rc::ptr_eq(&self.user_state, &other.user_state)
+        // The following always return True, because RefCell is used.
+        // && Rc::ptr_eq(&self.input_params, &other.input_params)
+        // && Rc::ptr_eq(&self.output_params, &other.output_params)
+        // && Rc::ptr_eq(&self.connections, &other.connections)
+        // && Rc::ptr_eq(&self.user_state, &other.user_state)
     }
 }
 
@@ -56,53 +67,65 @@ pub fn node<NodeData, DataType, ValueType, UserState>(
         input_params,
         output_params,
         connections,
+        ports_ref,
     }: &NodeProps<NodeData, DataType, ValueType, UserState>,
 ) -> Html
 where
-    DataType: Display + Clone + PartialEq + 'static,
-    ValueType: WidgetValueTrait<UserState = UserState, NodeData = NodeData> + Clone,
+    NodeData: 'static,
+    DataType: Display + PartialEq + Clone + 'static,
+    ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState> + 'static,
+    UserState: 'static,
 {
+    let port_event = Callback::from({
+        let onevent = onevent.clone();
+        move |e| onevent.emit(NodeEvent::Port(e))
+    });
     let input_ports = input_ports(
         &data.inputs,
         data.id,
         &data.user_data,
-        onevent.clone(),
+        port_event.clone(),
         input_params,
         connections,
-        &mut *user_state.borrow_mut(),
+        ports_ref,
+        user_state.clone(),
     );
-    let output_ports = output_ports(&data.outputs, onevent.clone(), &output_params);
+    let output_ports = output_ports(&data.outputs, port_event, output_params, ports_ref);
+
     let node = css! {r#"
 position:absolute;
 user-select:none;
 "#};
-
-    let node_ref = use_event_listeners([
-        (
-            "click",
-            Box::new({
-                let onevent = onevent.clone();
-                move |e| {
-                    e.stop_propagation();
-                    onevent.emit(NodeEvent::Select {
-                        shift_key: e.shift_key(),
-                    })
-                }
-            }),
-        ),
-        (
-            "mousedown",
-            Box::new({
-                let onevent = onevent.clone();
-                move |e| {
-                    onevent.emit(NodeEvent::DragStart {
-                        gap: get_offset_from_current_target(&e),
-                        shift_key: e.shift_key(),
-                    })
-                }
-            }),
-        ),
-    ]);
+    let node_ref = use_node_ref();
+    use_event_listeners(
+        node_ref.clone(),
+        [
+            (
+                "click",
+                Box::new({
+                    let onevent = onevent.clone();
+                    move |e| {
+                        e.stop_propagation();
+                        onevent.emit(NodeEvent::Select {
+                            shift_key: e.shift_key(),
+                        })
+                    }
+                }),
+            ),
+            (
+                "mousedown",
+                Box::new({
+                    let onevent = onevent.clone();
+                    move |e| {
+                        onevent.emit(NodeEvent::DragStart {
+                            gap: get_offset_from_current_target(&e),
+                            shift_key: e.shift_key(),
+                        })
+                    }
+                }),
+            ),
+        ],
+    );
     html! {
         <div
             ref={node_ref}
@@ -127,76 +150,100 @@ pub enum NodeEvent {
     Port(PortEvent),
 }
 
-pub fn input_ports<DataType, ValueType, NodeData, UserState>(
-    ports: &[(String, InputId)],
+#[derive(Debug, Clone)]
+pub enum NodeRendered {
+    InputWidget(InputId, NodeRef),
+    OutputWidget(OutputId, NodeRef),
+    Node(NodeId, NodeRef),
+}
+
+pub fn input_ports<NodeData, DataType, ValueType, UserState>(
+    ports: &[(Rc<String>, InputId)],
     node_id: NodeId,
-    node_data: &NodeData,
-    onevent: Callback<NodeEvent>,
+    node_data: &Rc<NodeData>,
+    onevent: Callback<PortEvent>,
     input_params: &InputParams<DataType, ValueType>,
     connections: &Connections,
-    user_state: &mut UserState,
+    ports_ref: &PortsRef,
+    user_state: Rc<RefCell<UserState>>,
 ) -> Html
 where
+    NodeData: 'static,
     DataType: Display + PartialEq + Clone + 'static,
-    ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState> + Clone,
+    ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState> + 'static,
+    UserState: 'static,
 {
     let connections = connections.borrow();
-    let ports = ports.iter().map(|(param_name, id)| {
+    let widgets = ports.iter().map(|(name, id)| {
         let id = *id;
-        let input_params = &input_params.borrow()[id];
-        let widget = if connections.contains_key(id) {
-            html! {param_name}
-        } else {
-            input_params
-                .value
-                .value_widget(param_name, node_id, user_state, node_data)
-        };
+        let node_data = node_data.clone();
+        let is_connected = connections.contains_key(id);
+        let param = input_params.borrow()[id].clone();
+        let user_state = user_state.clone();
+        let node_ref = ports_ref.borrow()[id].clone();
         let onevent = onevent.clone();
         html! {
-            <div class={"port-wrap"}>
-                <Port<InputId, DataType> {id}
-                typ={input_params.typ.clone()}
-                is_should_draw={input_params.kind.is_should_draw()}
-                onevent={move |event| {
-                    onevent.emit(NodeEvent::Port(event))
-                }}/>
-                <div class={"port-widget"}>
-                    {widget}
-                </div>
-            </div>
+            <PortWrap>
+                <Port<InputId, DataType>
+                    {node_ref}
+                    {id}
+                    typ={param.typ.clone()}
+                    is_should_draw={param.kind.is_should_draw()}
+                    {onevent}
+                />
+                <InputWidget<NodeData, DataType, ValueType, UserState>
+                    {name}
+                    {is_connected}
+                    {param}
+                    {node_data}
+                    {node_id}
+                    {user_state}
+                    key={id.to_string()}
+                />
+            </PortWrap>
         }
     });
     html! {
         <div class={"ports"} data-io={"input"}>
-            {for ports}
+            {for widgets}
         </div>
     }
 }
 pub fn output_ports<DataType>(
-    ports: &[(String, OutputId)],
-    onevent: Callback<NodeEvent>,
-    output_params: &OutputParams<DataType>,
+    ports: &[(Rc<String>, OutputId)],
+    onevent: Callback<PortEvent>,
+    params: &OutputParams<DataType>,
+    ports_ref: &PortsRef,
 ) -> Html
 where
     DataType: Display + PartialEq + Clone + 'static,
 {
-    let ports = ports.iter().map(|(label, id)| {
+    let widgets = ports.iter().map(|(name, id)| {
         let id = *id;
-        let typ = output_params.borrow()[id].typ.clone();
+        let name = name.clone();
+        let param = params.borrow()[id].clone();
+        let typ = param.typ.clone();
+        let node_ref = ports_ref.borrow()[id].clone();
         let onevent = onevent.clone();
         html! {
-            <div class={"port-wrap"}>
-                <div class={"port-widget"}>{label}</div>
-                <Port<OutputId, DataType> {id} {typ} is_should_draw={true} onevent={move |event| {
-                    onevent.emit(NodeEvent::Port(event))
-                }}
-                    />
-            </div>
+        <PortWrap>
+            <OutputWidget<DataType>
+                {name}
+                {param}
+            />
+            <Port<OutputId, DataType>
+                {node_ref}
+                {id}
+                {typ}
+                is_should_draw=true
+                {onevent}
+            />
+        </PortWrap>
         }
     });
     html! {
         <div class={"ports"} data-io={"output"}>
-            {for ports}
+            {for widgets}
         </div>
     }
 }

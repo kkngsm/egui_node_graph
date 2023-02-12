@@ -15,13 +15,13 @@ impl AnyParameterId {
     pub fn assume_input(&self) -> InputId {
         match self {
             AnyParameterId::Input(input) => *input,
-            AnyParameterId::Output(output) => panic!("{:?} is not an InputId", output),
+            AnyParameterId::Output(output) => panic!("{output:?} is not an InputId"),
         }
     }
     pub fn assume_output(&self) -> OutputId {
         match self {
             AnyParameterId::Output(output) => *output,
-            AnyParameterId::Input(input) => panic!("{:?} is not an OutputId", input),
+            AnyParameterId::Input(input) => panic!("{input:?} is not an OutputId"),
         }
     }
 }

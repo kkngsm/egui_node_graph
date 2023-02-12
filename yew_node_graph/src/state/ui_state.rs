@@ -31,7 +31,7 @@ pub struct NodeFinder {
 
 use std::ops::Index;
 
-use glam::Vec2;
+use glam::{Vec2};
 use slotmap::SecondaryMap;
 
 use super::{AnyParameterId, InputId, NodeId, OutputId};
@@ -46,69 +46,69 @@ pub struct MousePosOnNode {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct PortPositions {
-    pub input: SecondaryMap<InputId, Vec2>,
-    pub output: SecondaryMap<OutputId, Vec2>,
+pub struct PortsData<T> {
+    pub input: SecondaryMap<InputId, T>,
+    pub output: SecondaryMap<OutputId, T>,
 }
 
-impl PortPositions {
-    pub fn insert(&mut self, key: AnyParameterId, value: Vec2) -> Option<Vec2> {
+impl<T> PortsData<T> {
+    pub fn insert(&mut self, key: AnyParameterId, value: T) -> Option<T> {
         match key {
             AnyParameterId::Input(id) => self.input.insert(id, value),
             AnyParameterId::Output(id) => self.output.insert(id, value),
         }
     }
-    pub fn remove(&mut self, key: AnyParameterId) -> Option<Vec2> {
+    pub fn remove(&mut self, key: AnyParameterId) -> Option<T> {
         match key {
             AnyParameterId::Input(id) => self.input.remove(id),
             AnyParameterId::Output(id) => self.output.remove(id),
         }
     }
-    pub fn get(&self, key: AnyParameterId) -> Option<&Vec2> {
+    pub fn get(&self, key: AnyParameterId) -> Option<&T> {
         match key {
             AnyParameterId::Input(id) => self.input.get(id),
             AnyParameterId::Output(id) => self.output.get(id),
         }
     }
-    pub fn get_mut(&mut self, key: AnyParameterId) -> Option<&mut Vec2> {
+    pub fn get_mut(&mut self, key: AnyParameterId) -> Option<&mut T> {
         match key {
             AnyParameterId::Input(id) => self.input.get_mut(id),
             AnyParameterId::Output(id) => self.output.get_mut(id),
         }
     }
 
-    /// Return ports that are within the threshold
-    /// # Warning
-    /// - It is not the closest port of all, since it returns when a port is found with a distance less than or equal to the threshold value.
-    /// - For optimization, the threshold value is the square of the distance
-    pub fn get_near_input(&self, pos: Vec2, th: f32) -> Option<(InputId, &Vec2)> {
-        self.input
-            .iter()
-            .find(|(_, port_pos)| port_pos.distance_squared(pos) < th)
-    }
-    /// Output version of [`get_near_input`]
-    pub fn get_near_output(&self, pos: Vec2, th: f32) -> Option<(OutputId, &Vec2)> {
-        self.output
-            .iter()
-            .find(|(_, port_pos)| port_pos.distance_squared(pos) < th)
-    }
+    // /// Return ports that are within the threshold
+    // /// # Warning
+    // /// - It is not the closest port of all, since it returns when a port is found with a distance less than or equal to the threshold value.
+    // /// - For optimization, the threshold value is the square of the distance
+    // pub fn get_near_input(&self, pos: T, th: f32) -> Option<(InputId, &T)> {
+    //     self.input
+    //         .iter()
+    //         .find(|(_, port_pos)| port_pos.distance_squared(pos) < th)
+    // }
+    // /// Output version of [`get_near_input`]
+    // pub fn get_near_output(&self, pos: T, th: f32) -> Option<(OutputId, &T)> {
+    //     self.output
+    //         .iter()
+    //         .find(|(_, port_pos)| port_pos.distance_squared(pos) < th)
+    // }
 }
 
-impl Index<InputId> for PortPositions {
-    type Output = Vec2;
+impl<T> Index<InputId> for PortsData<T> {
+    type Output = T;
     fn index(&self, index: InputId) -> &Self::Output {
         &self.input[index]
     }
 }
-impl Index<OutputId> for PortPositions {
-    type Output = Vec2;
+impl<T> Index<OutputId> for PortsData<T> {
+    type Output = T;
     fn index(&self, index: OutputId) -> &Self::Output {
         &self.output[index]
     }
 }
 
-impl Index<AnyParameterId> for PortPositions {
-    type Output = Vec2;
+impl<T> Index<AnyParameterId> for PortsData<T> {
+    type Output = T;
     fn index(&self, index: AnyParameterId) -> &Self::Output {
         self.get(index).unwrap_or_else(|| {
             panic!(

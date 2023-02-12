@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize};
 pub struct Node<NodeData> {
     pub id: NodeId,
     pub label: String,
-    pub inputs: Vec<(String, InputId)>,
-    pub outputs: Vec<(String, OutputId)>,
-    pub user_data: NodeData,
+    pub inputs: Vec<(Rc<String>, InputId)>,
+    pub outputs: Vec<(Rc<String>, OutputId)>,
+    pub user_data: Rc<NodeData>,
 }
 
 /// The three kinds of input params. These describe how the graph must behave

@@ -12,7 +12,8 @@ use super::*;
 /// used, so the implementation is not important, but it should be reasonably
 /// cheap to construct.
 pub trait WidgetValueTrait {
-    type Response;
+    // TODO
+    // type Response;
     type UserState;
     type NodeData;
 

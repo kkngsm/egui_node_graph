@@ -2,24 +2,32 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::rc::Rc;
 
+use crate::components::contextmenu::ContextMenu;
 use crate::components::edge::Edge;
+use crate::components::graph::{BackgroundEvent, GraphArea};
+use crate::components::node::{Node, NodeEvent};
 use crate::components::port::PortEvent;
-use crate::components::*;
 use crate::state::{
     AnyParameterId, Graph, MousePosOnNode, NodeFinder, NodeId, NodeTemplateIter, NodeTemplateTrait,
-    PortPositions, WidgetValueTrait,
+    PortsData, WidgetValueTrait,
 };
-use crate::utils::get_offset_from_current_target;
+use crate::utils::{get_center, get_near, get_offset_from_current_target};
 use crate::Vec2;
 use glam::vec2;
 use gloo::events::EventListener;
 use gloo::utils::window;
 use slotmap::SecondaryMap;
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
-use web_sys::Element;
 use yew::prelude::*;
+
+pub type PortsRef = Rc<RefCell<PortsData<NodeRef>>>;
+#[derive(Default)]
+pub struct GraphRef(NodeRef);
+
+const NEAR_THRESHOLD: f32 = 100.0;
 /// Basic GraphEditor components
 /// The following limitations apply
 /// - NodeFinder is the default
@@ -52,7 +60,7 @@ where
     node_positions: SecondaryMap<NodeId, crate::Vec2>,
 
     /// The position of each port.
-    port_positions: PortPositions,
+    port_refs: PortsRef,
 
     /// The node finder is used to create new nodes.
     node_finder: NodeFinder,
@@ -62,7 +70,7 @@ where
     ///
     mouse_on_node: Option<MousePosOnNode>,
 
-    graph_ref: NodeRef,
+    graph_ref: GraphRef,
 
     _drag_event: Option<[EventListener; 2]>,
 
@@ -89,12 +97,6 @@ pub enum GraphMessage<NodeTemplate> {
     CreateNode(NodeTemplate),
 
     BackgroundClick,
-
-    PortRendered {
-        id: AnyParameterId,
-        global_pos: Vec2,
-    },
-    GraphRendered(NodeRef),
 
     None,
 }
@@ -129,7 +131,7 @@ where
             selected_nodes: Default::default(),
             connection_in_progress: Default::default(),
             node_positions: Default::default(),
-            port_positions: Default::default(),
+            port_refs: Default::default(),
             node_finder: Default::default(),
             mouse_on_node: Default::default(),
             graph_ref: Default::default(),
@@ -165,52 +167,75 @@ where
                 if let AnyParameterId::Input(input_id) = id {
                     if self.graph.connections().contains_key(input_id) {
                         let output_id = self.graph.connections_mut().remove(input_id).unwrap();
-                        self.connection_in_progress =
-                            Some((output_id.into(), self.port_positions[input_id]));
+                        self.connection_in_progress = Some((
+                            output_id.into(),
+                            self.port_refs
+                                .borrow()
+                                .output
+                                .get(output_id)
+                                .map(get_center)
+                                .unwrap_or_default(),
+                        ));
                     } else {
-                        self.connection_in_progress = Some((id, self.port_positions[id]));
+                        self.connection_in_progress = Some((
+                            id,
+                            self.port_refs
+                                .borrow()
+                                .get(id)
+                                .map(get_center)
+                                .unwrap_or_default(),
+                        ));
                     }
                 } else {
-                    self.connection_in_progress = Some((id, self.port_positions[id]));
+                    self.connection_in_progress = Some((
+                        id,
+                        self.port_refs
+                            .borrow()
+                            .get(id)
+                            .map(get_center)
+                            .unwrap_or_default(),
+                    ));
                 }
                 false
             }
-            GraphMessage::Dragging(pos) => {
+            GraphMessage::Dragging(mouse_pos) => {
+                let offset = self.graph_ref.get_offset().unwrap_or_default();
+                let global_mouse_pos = mouse_pos + offset;
+
                 // Connecting to p ort
                 if let Some((id, p)) = self.connection_in_progress.as_mut() {
                     // snap to port
                     let nearest_port_pos = match *id {
                         AnyParameterId::Input(input_id) => self
-                            .port_positions
-                            .get_near_output(pos, 100.0)
+                            .port_refs
+                            .borrow()
+                            .output
+                            .iter()
+                            .find_map(get_near(global_mouse_pos, NEAR_THRESHOLD))
                             .map(|(output_id, pos)| (output_id, input_id, pos)),
                         AnyParameterId::Output(output_id) => self
-                            .port_positions
-                            .get_near_input(pos, 100.0)
+                            .port_refs
+                            .borrow()
+                            .input
+                            .iter()
+                            .find_map(get_near(global_mouse_pos, NEAR_THRESHOLD))
                             .map(|(input_id, pos)| (output_id, input_id, pos)),
                     }
                     .and_then(|(output, input, pos)| {
-                        self.graph.param_typ_eq(output, input).then(|| pos)
+                        self.graph.param_typ_eq(output, input).then(|| pos - offset)
                     });
 
-                    *p = nearest_port_pos.cloned().unwrap_or(pos);
+                    *p = nearest_port_pos.unwrap_or(mouse_pos);
                     true
 
                 // Dragging node
                 } else if let Some(MousePosOnNode { id, gap }) = self.mouse_on_node {
-                    let pos = pos - gap;
+                    let pos = mouse_pos - gap;
                     let selected_pos = self.node_positions[id];
                     let drag_delta = pos - selected_pos;
                     for id in &self.selected_nodes {
                         let id = *id;
                         self.node_positions[id] += drag_delta;
-                        let node = &*self.graph[id];
-                        for id in node.input_ids() {
-                            self.port_positions.input[id] += drag_delta;
-                        }
-                        for id in node.output_ids() {
-                            self.port_positions.output[id] += drag_delta;
-                        }
                     }
                     true
                 } else {
@@ -223,14 +248,22 @@ where
 
                 // Connect to Port
                 if let Some((id, pos)) = self.connection_in_progress.take() {
+                    let offset = self.graph_ref.get_offset().unwrap_or_default();
+                    let global_pos = pos + offset;
                     let nearest_port = match id {
                         AnyParameterId::Input(input) => self
-                            .port_positions
-                            .get_near_output(pos, 100.0)
+                            .port_refs
+                            .borrow()
+                            .output
+                            .iter()
+                            .find_map(get_near(global_pos, NEAR_THRESHOLD))
                             .map(|(output, _)| (input, output)),
                         AnyParameterId::Output(output) => self
-                            .port_positions
-                            .get_near_input(pos, 100.0)
+                            .port_refs
+                            .borrow()
+                            .input
+                            .iter()
+                            .find_map(get_near(global_pos, NEAR_THRESHOLD))
                             .map(|(input, _)| (input, output)),
                     };
                     if let Some((input, output)) = nearest_port {
@@ -249,6 +282,20 @@ where
                 );
                 self.node_positions.insert(new_node, self.node_finder.pos);
                 self.selected_nodes.insert(new_node);
+
+                let node = &self.graph[new_node];
+                for input in node.input_ids() {
+                    self.port_refs
+                        .borrow_mut()
+                        .input
+                        .insert(input, Default::default());
+                }
+                for output in node.output_ids() {
+                    self.port_refs
+                        .borrow_mut()
+                        .output
+                        .insert(output, Default::default());
+                }
                 true
             }
             GraphMessage::OpenNodeFinder(pos) => {
@@ -274,17 +321,6 @@ where
                 };
                 changed
             }
-            GraphMessage::GraphRendered(node_ref) => {
-                self.graph_ref = node_ref;
-                false
-            }
-            GraphMessage::PortRendered { id, global_pos } => {
-                let element = self.graph_ref.cast::<Element>().unwrap();
-                let rect = element.get_bounding_client_rect();
-                let pos = global_pos - vec2(rect.left() as f32, rect.top() as f32);
-                self.port_positions.insert(id, pos);
-                false
-            }
             GraphMessage::None => false,
         }
     }
@@ -298,9 +334,6 @@ where
                     data: MousePosOnNode { id, gap },
                     shift_key,
                 },
-                NodeEvent::Port(PortEvent::Rendered { id, global_pos }) => {
-                    PortRendered { id, global_pos }
-                }
                 NodeEvent::Port(PortEvent::MouseDown(id)) => DragStartPort(id),
             });
             html! {<Node<NodeData, DataType, ValueType, UserState>
@@ -313,46 +346,76 @@ where
                 input_params={self.graph.inputs.clone()}
                 output_params={self.graph.outputs.clone()}
                 connections={self.graph.connections.clone()}
+                ports_ref={self.port_refs.clone()}
             />}
         });
 
         let background_event = ctx.link().callback(|e: BackgroundEvent| match e {
             BackgroundEvent::ContextMenu(pos) => OpenNodeFinder(pos),
             BackgroundEvent::Click(_) => BackgroundClick,
-            BackgroundEvent::Rendered(node_ref) => GraphRendered(node_ref),
         });
+        let edges = self.graph_ref.get_offset().map(|offset|{
+            let connection_in_progress = self.connection_in_progress.map(|(id, pos)| {
+                let (output, input, typ) = match id {
+                    AnyParameterId::Input(id) => (
+                        pos,
+                        self.port_refs
+                            .borrow()
+                            .input
+                            .get(id)
+                            .map(get_center)
+                            .unwrap_or_default() - offset,
+                        self.graph.inputs.borrow()[id].typ.clone(),
+                    ),
+                    AnyParameterId::Output(id) => (
+                        self.port_refs
+                            .borrow()
+                            .output
+                            .get(id)
+                            .map(get_center)
+                            .unwrap_or_default() - offset,
+                        pos,
+                        self.graph.outputs.borrow()[id].typ.clone(),
+                    ),
+                };
+                html! {
+                    <Edge<DataType> {output} {input} {typ}/>
+                }
+            });
 
-        let connection_in_progress = self.connection_in_progress.map(|(id, pos)| {
-            let (output, input, typ) = match id {
-                AnyParameterId::Input(id) => (
-                    pos,
-                    self.port_positions[id],
-                    self.graph.inputs.borrow()[id].typ.clone(),
-                ),
-                AnyParameterId::Output(id) => (
-                    self.port_positions[id],
-                    pos,
-                    self.graph.outputs.borrow()[id].typ.clone(),
-                ),
-            };
+            let connections = self.graph.connections();
+            let edges = connections.iter().map(|(input, output)| {
+                let typ = self.graph.input(input).typ.clone();
+                let output_pos = self
+                    .port_refs.borrow()
+                    .output
+                    .get(*output)
+                    .map(get_center)
+                    .unwrap_or_default();
+                let input_pos = self
+                    .port_refs.borrow()
+                    .input
+                    .get(input)
+                    .map(get_center)
+                    .unwrap_or_default();
+                html! {<Edge<DataType> key={output.to_string()} output={output_pos-offset} input={input_pos-offset} {typ} />}
+            });
+
             html! {
-                <Edge<DataType> {output} {input} {typ}/>
+                <>
+                {for edges}
+                {connection_in_progress}
+                </>
             }
         });
-        let connections = self.graph.connections();
-        let edges = connections.iter().map(|(input, output)| {
-            let typ = self.graph.input(input).typ.clone();
-            let output = self.port_positions[*output];
-            let input = self.port_positions[input];
-            html! {<Edge<DataType> key={output.to_string()} {output} {input} {typ} />}
-        });
+
         html! {
             <GraphArea
+                node_ref={self.graph_ref.clone()}
                 onevent={background_event}
             >
             {for nodes}
-            {for edges}
-            {connection_in_progress}
+            {edges}
             <BasicNodeFinder<NodeTemplate, UserState>
                 is_showing={self.node_finder.is_showing}
                 pos={self.node_finder.pos}
@@ -432,5 +495,21 @@ where
                 {for buttons}
             </ul>
         </ContextMenu>
+    }
+}
+
+impl GraphRef {
+    pub fn get_offset(&self) -> Option<Vec2> {
+        self.0.cast::<web_sys::Element>().map(|e| {
+            let rect = e.get_bounding_client_rect();
+            vec2(rect.x() as f32, rect.y() as f32)
+        })
+    }
+}
+
+impl Deref for GraphRef {
+    type Target = NodeRef;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

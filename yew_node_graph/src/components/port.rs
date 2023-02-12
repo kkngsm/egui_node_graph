@@ -1,13 +1,13 @@
+pub mod widget;
+pub mod wrap;
 use std::fmt::Display;
-
-use glam::Vec2;
 use web_sys::MouseEvent;
 use yew::{
-    function_component, html, use_effect_with_deps, use_node_ref, Callback, Html, NodeRef,
+    function_component, html, Callback, Html, NodeRef,
     Properties,
 };
 
-use crate::{state::AnyParameterId, utils::get_center};
+use crate::state::AnyParameterId;
 #[derive(Properties, PartialEq)]
 pub struct PortProps<PortId, DataType>
 where
@@ -17,6 +17,7 @@ where
     pub typ: DataType,
     pub id: PortId,
     pub is_should_draw: bool,
+    pub node_ref: NodeRef,
     pub onevent: Callback<PortEvent>,
 }
 #[function_component(Port)]
@@ -25,6 +26,7 @@ pub fn port<PortId, DataType>(
         typ,
         id,
         is_should_draw,
+        node_ref,
         onevent,
     }: &PortProps<PortId, DataType>,
 ) -> Html
@@ -33,22 +35,7 @@ where
     PortId: Into<AnyParameterId> + PartialEq + Copy + 'static,
 {
     let id = *id;
-    let node_ref = use_node_ref();
     let is_should_draw = *is_should_draw;
-    use_effect_with_deps(
-        {
-            let onevent = onevent.clone();
-            move |node_ref: &NodeRef| {
-                let element = node_ref.cast::<web_sys::Element>().unwrap();
-                let global_pos = get_center(&element);
-                onevent.emit(PortEvent::Rendered {
-                    id: id.into(),
-                    global_pos,
-                })
-            }
-        },
-        node_ref.clone(),
-    );
     html! {
         <div
             onmousedown={{
@@ -68,8 +55,4 @@ where
 #[derive(Debug, Clone)]
 pub enum PortEvent {
     MouseDown(AnyParameterId),
-    Rendered {
-        id: AnyParameterId,
-        global_pos: Vec2,
-    },
 }

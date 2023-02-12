@@ -27,7 +27,7 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
                 // These get filled in later by the user function
                 inputs: Vec::default(),
                 outputs: Vec::default(),
-                user_data,
+                user_data: Rc::new(user_data),
             })
         });
 
@@ -60,7 +60,7 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
         });
         Rc::make_mut(&mut self.nodes[node_id])
             .inputs
-            .push((name, input_id));
+            .push((Rc::new(name), input_id));
         input_id
     }
 
@@ -102,7 +102,7 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
         });
         Rc::make_mut(&mut self.nodes[node_id])
             .outputs
-            .push((name, output_id));
+            .push((Rc::new(name), output_id));
         output_id
     }
 
@@ -243,7 +243,7 @@ impl<NodeData> Node<NodeData> {
     pub fn get_input(&self, name: &str) -> Result<InputId, EguiGraphError> {
         self.inputs
             .iter()
-            .find(|(param_name, _id)| param_name == name)
+            .find(|(param_name, _id)| param_name.as_str() == name)
             .map(|x| x.1)
             .ok_or_else(|| EguiGraphError::NoParameterNamed(self.id, name.into()))
     }
@@ -251,7 +251,7 @@ impl<NodeData> Node<NodeData> {
     pub fn get_output(&self, name: &str) -> Result<OutputId, EguiGraphError> {
         self.outputs
             .iter()
-            .find(|(param_name, _id)| param_name == name)
+            .find(|(param_name, _id)| param_name.as_str() == name)
             .map(|x| x.1)
             .ok_or_else(|| EguiGraphError::NoParameterNamed(self.id, name.into()))
     }
