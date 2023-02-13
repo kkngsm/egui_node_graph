@@ -31,7 +31,7 @@ pub struct NodeFinder {
 
 use std::ops::Index;
 
-use glam::{Vec2};
+use glam::Vec2;
 use slotmap::SecondaryMap;
 
 use super::{AnyParameterId, InputId, NodeId, OutputId};
@@ -117,5 +117,100 @@ impl<T> Index<AnyParameterId> for PortsData<T> {
                 index
             )
         })
+    }
+}
+#[derive(Debug, Clone)]
+pub enum ConnectTo<Id> {
+    Id(Id),
+    Pos(Vec2),
+}
+impl<Id> ConnectTo<Id> {
+    pub fn map_pos(&self, f: impl Fn(&Id) -> Vec2) -> Vec2 {
+        match self {
+            ConnectTo::Id(id) => f(id),
+            ConnectTo::Pos(pos) => *pos,
+        }
+    }
+}
+impl From<InputId> for ConnectTo<InputId> {
+    fn from(value: InputId) -> Self {
+        Self::Id(value)
+    }
+}
+impl From<OutputId> for ConnectTo<OutputId> {
+    fn from(value: OutputId) -> Self {
+        Self::Id(value)
+    }
+}
+impl<Id> From<Vec2> for ConnectTo<Id> {
+    fn from(value: Vec2) -> Self {
+        Self::Pos(value)
+    }
+}
+#[derive(Debug, Default, Clone)]
+pub enum ConnectionInProgress {
+    FromInput {
+        from: InputId,
+        to: ConnectTo<OutputId>,
+    },
+    FromOutput {
+        from: OutputId,
+        to: ConnectTo<InputId>,
+    },
+    #[default]
+    None,
+}
+impl ConnectionInProgress {
+    pub fn to_id(&mut self, id: AnyParameterId) {
+        match (self, id) {
+            (ConnectionInProgress::FromInput { from, to }, AnyParameterId::Output(_)) => todo!(),
+            (ConnectionInProgress::FromOutput { from, to }, AnyParameterId::Input(_)) => todo!(),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn to_pos(&mut self, pos: Vec2) {
+        match self {
+            ConnectionInProgress::FromInput { from, to } => *to = pos.into(),
+            ConnectionInProgress::FromOutput { from, to } => *to = pos.into(),
+            ConnectionInProgress::None => (),
+        }
+    }
+
+    pub fn take(&mut self) -> Self {
+        std::mem::take(self)
+    }
+}
+
+impl From<(AnyParameterId, Vec2)> for ConnectionInProgress {
+    fn from((id, pos): (AnyParameterId, Vec2)) -> Self {
+        match id {
+            AnyParameterId::Input(id) => Self::FromInput {
+                from: id,
+                to: pos.into(),
+            },
+            AnyParameterId::Output(id) => Self::FromOutput {
+                from: id,
+                to: pos.into(),
+            },
+        }
+    }
+}
+
+impl From<(OutputId, Vec2)> for ConnectionInProgress {
+    fn from((id, pos): (OutputId, Vec2)) -> Self {
+        Self::FromOutput {
+            from: id,
+            to: pos.into(),
+        }
+    }
+}
+
+impl From<(InputId, Vec2)> for ConnectionInProgress {
+    fn from((id, pos): (InputId, Vec2)) -> Self {
+        Self::FromInput {
+            from: id,
+            to: pos.into(),
+        }
     }
 }
