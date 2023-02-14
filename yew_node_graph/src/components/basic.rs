@@ -214,18 +214,32 @@ where
                 }
             }
             GraphMessage::EnterPort(id) => {
-                self.connection_in_progress.to_id(id);
+                let typ_eq = self
+                    .connection_in_progress
+                    .connection_pair(id)
+                    .map(|(output, input)| self.graph.param_typ_eq(output, input))
+                    .unwrap_or_default();
+                if typ_eq {
+                    self.connection_in_progress.to_id(id);
+                }
                 true
             }
             GraphMessage::LeavePort(id) => {
-                let offset = self.graph_ref.get_offset().unwrap_or_default();
-                let port_pos = self
-                    .port_refs
-                    .borrow()
-                    .get(id)
-                    .map(|n| get_center(n) - offset)
+                let typ_eq = self
+                    .connection_in_progress
+                    .connection_pair(id)
+                    .map(|(output, input)| self.graph.param_typ_eq(output, input))
                     .unwrap_or_default();
-                self.connection_in_progress.to_pos(port_pos);
+                if typ_eq {
+                    let offset = self.graph_ref.get_offset().unwrap_or_default();
+                    let port_pos = self
+                        .port_refs
+                        .borrow()
+                        .get(id)
+                        .map(|n| get_center(n) - offset)
+                        .unwrap_or_default();
+                    self.connection_in_progress.to_pos(port_pos);
+                }
                 false
             }
             GraphMessage::DragEnd => {

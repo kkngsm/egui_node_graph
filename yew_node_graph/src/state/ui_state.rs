@@ -173,8 +173,8 @@ pub enum ConnectionInProgress {
 }
 
 impl ConnectionInProgress {
-    /// Set the destination to Port
-    /// #Example
+    /// Change the destination to PortId from Position
+    /// # Example
     /// ```
     /// use yew_node_graph::{
     ///     state::{ConnectTo, ConnectionInProgress, InputId, OutputId},
@@ -214,8 +214,8 @@ impl ConnectionInProgress {
             _ => (),
         }
     }
-    /// Set the destination to Position
-    /// #Example
+    /// Change the destination to Position from Port
+    /// # Example
     /// ```
     /// use yew_node_graph::{
     ///     state::{ConnectTo, ConnectionInProgress, InputId, OutputId},
@@ -245,6 +245,53 @@ impl ConnectionInProgress {
             ConnectionInProgress::FromInput { src: _, dest } => *dest = pos.into(),
             ConnectionInProgress::FromOutput { src: _, dest } => *dest = pos.into(),
             ConnectionInProgress::None => (),
+        }
+    }
+
+    /// Returns Output/Input pairs
+    /// # Example
+    /// ```
+    /// use yew_node_graph::{
+    ///     state::{
+    ///         ConnectTo, ConnectionInProgress, InputId, OutputId,
+    ///         AnyParameterId
+    ///     },
+    ///     vec2,
+    /// };
+    /// fn example(input: InputId, output: OutputId, another_input: InputId) {
+    ///     let mut connection_in_progress = ConnectionInProgress::FromInput {
+    ///         src: input,
+    ///         dest: ConnectTo::Pos(vec2(12.0, 3.0)),
+    ///     };
+    ///
+    ///     assert_eq!(
+    ///         connection_in_progress.connection_pair(AnyParameterId::Output(output)),
+    ///         Some((output,input))
+    ///     );
+    ///     // Inputs cannot be connected to inputs.
+    ///     assert_eq!(
+    ///         connection_in_progress.connection_pair(AnyParameterId::Input(another_input)),
+    ///         None
+    ///     )
+    /// }
+    /// ```
+    pub fn connection_pair(&self, id: AnyParameterId) -> Option<(OutputId, InputId)> {
+        match (self, id) {
+            (
+                ConnectionInProgress::FromInput {
+                    src: input,
+                    dest: _,
+                },
+                AnyParameterId::Output(output),
+            ) => Some((output, *input)),
+            (
+                ConnectionInProgress::FromOutput {
+                    src: output,
+                    dest: _,
+                },
+                AnyParameterId::Input(input),
+            ) => Some((*output, input)),
+            _ => None,
         }
     }
 
