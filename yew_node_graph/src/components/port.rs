@@ -1,11 +1,8 @@
+pub mod unit;
 pub mod widget;
-pub mod wrap;
 use std::fmt::Display;
 use web_sys::MouseEvent;
-use yew::{
-    function_component, html, Callback, Html, NodeRef,
-    Properties,
-};
+use yew::{function_component, html, Callback, Html, NodeRef, Properties};
 
 use crate::state::AnyParameterId;
 #[derive(Properties, PartialEq)]
@@ -40,9 +37,21 @@ where
         <div
             onmousedown={{
                 let onevent = onevent.clone();
-                move|e:MouseEvent| if is_should_draw{
+                move|e:MouseEvent| {
                         e.stop_propagation();
                         onevent.emit(PortEvent::MouseDown(id.into()))
+                }
+            }}
+            onmouseenter={{
+                let onevent = onevent.clone();
+                move|_:MouseEvent| {
+                        onevent.emit(PortEvent::MouseEnter(id.into()))
+                }
+            }}
+            onmouseleave={{
+                let onevent = onevent.clone();
+                move|_:MouseEvent| {
+                    onevent.emit(PortEvent::MouseLeave(id.into()))
                 }
             }}
             ref={node_ref}
@@ -55,4 +64,6 @@ where
 #[derive(Debug, Clone)]
 pub enum PortEvent {
     MouseDown(AnyParameterId),
+    MouseEnter(AnyParameterId),
+    MouseLeave(AnyParameterId),
 }

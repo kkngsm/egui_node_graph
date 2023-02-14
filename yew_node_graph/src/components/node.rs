@@ -1,20 +1,20 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
-    state::{Connections, InputId, InputParams, NodeId, OutputId, OutputParams, WidgetValueTrait},
+    state::{
+        Connections, InputId, InputParams, NodeId, OutputId, OutputParams, PortRefs,
+        WidgetValueTrait,
+    },
     utils::{get_offset_from_current_target, use_event_listeners},
     Vec2,
 };
 use stylist::yew::styled_component;
 use yew::prelude::*;
 
-use super::{
-    basic::PortsRef,
-    port::{
-        widget::{InputWidget, OutputWidget},
-        wrap::PortWrap,
-        Port, PortEvent,
-    },
+use super::port::{
+    unit::PortUnit,
+    widget::{InputWidget, OutputWidget},
+    Port, PortEvent,
 };
 
 #[derive(Properties)]
@@ -28,7 +28,7 @@ pub struct NodeProps<NodeData, DataType, ValueType, UserState> {
     pub input_params: InputParams<DataType, ValueType>,
     pub output_params: OutputParams<DataType>,
     pub connections: Connections,
-    pub ports_ref: PortsRef,
+    pub ports_ref: PortRefs,
     pub user_state: Rc<RefCell<UserState>>,
 }
 impl<NodeData, DataType, ValueType, UserState> PartialEq
@@ -166,7 +166,7 @@ pub enum NodeRendered {
     OutputWidget(OutputId, NodeRef),
     Node(NodeId, NodeRef),
 }
-
+#[allow(clippy::too_many_arguments)]
 pub fn input_ports<NodeData, DataType, ValueType, UserState>(
     ports: &[(Rc<String>, InputId)],
     node_id: NodeId,
@@ -174,7 +174,7 @@ pub fn input_ports<NodeData, DataType, ValueType, UserState>(
     onevent: Callback<PortEvent>,
     input_params: &InputParams<DataType, ValueType>,
     connections: &Connections,
-    ports_ref: &PortsRef,
+    ports_ref: &PortRefs,
     user_state: Rc<RefCell<UserState>>,
 ) -> Html
 where
@@ -193,7 +193,7 @@ where
         let node_ref = ports_ref.borrow()[id].clone();
         let onevent = onevent.clone();
         html! {
-            <PortWrap>
+            <PortUnit>
                 <Port<InputId, DataType>
                     {node_ref}
                     {id}
@@ -210,7 +210,7 @@ where
                     {user_state}
                     key={id.to_string()}
                 />
-            </PortWrap>
+            </PortUnit>
         }
     });
     html! {
@@ -223,7 +223,7 @@ pub fn output_ports<DataType>(
     ports: &[(Rc<String>, OutputId)],
     onevent: Callback<PortEvent>,
     params: &OutputParams<DataType>,
-    ports_ref: &PortsRef,
+    ports_ref: &PortRefs,
 ) -> Html
 where
     DataType: Display + PartialEq + Clone + 'static,
@@ -236,7 +236,7 @@ where
         let node_ref = ports_ref.borrow()[id].clone();
         let onevent = onevent.clone();
         html! {
-        <PortWrap>
+        <PortUnit>
             <OutputWidget<DataType>
                 {name}
                 {param}
@@ -248,7 +248,7 @@ where
                 is_should_draw=true
                 {onevent}
             />
-        </PortWrap>
+        </PortUnit>
         }
     });
     html! {

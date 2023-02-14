@@ -46,6 +46,7 @@ pub fn get_offset_from_current_target(e: &MouseEvent) -> Vec2 {
 }
 
 #[hook]
+#[allow(clippy::type_complexity)]
 pub fn use_event_listeners<const N: usize>(
     node_ref: NodeRef,
     events_callbacks: [(&'static str, Box<dyn Fn(MouseEvent)>); N],

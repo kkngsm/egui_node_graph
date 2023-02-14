@@ -1,13 +1,13 @@
 use yew::{function_component, html, Children, Html, Properties};
 
 #[derive(PartialEq, Properties)]
-pub struct PortWrapProps {
+pub struct PortUnitProps {
     pub children: Children,
 }
-#[function_component(PortWrap)]
-pub fn port_wrap(PortWrapProps { children }: &PortWrapProps) -> Html {
+#[function_component(PortUnit)]
+pub fn port_unit(PortUnitProps { children }: &PortUnitProps) -> Html {
     html! {
-        <div class={"port-wrap"}>
+        <div class={"port-unit"}>
             {for children.iter()}
         </div>
     }

@@ -12,9 +12,9 @@ use crate::components::node::{Node, NodeEvent};
 use crate::components::port::PortEvent;
 use crate::state::{
     AnyParameterId, ConnectTo, ConnectionInProgress, Graph, MousePosOnNode, NodeFinder, NodeId,
-    NodeTemplateIter, NodeTemplateTrait, PortsData, WidgetValueTrait,
+    NodeTemplateIter, NodeTemplateTrait, PortRefs, WidgetValueTrait,
 };
-use crate::utils::{get_center, get_near, get_offset_from_current_target};
+use crate::utils::{get_center, get_offset_from_current_target};
 use crate::Vec2;
 use glam::vec2;
 use gloo::events::EventListener;
@@ -23,11 +23,9 @@ use slotmap::SecondaryMap;
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use yew::prelude::*;
 
-pub type PortsRef = Rc<RefCell<PortsData<NodeRef>>>;
 #[derive(Default)]
 pub struct GraphRef(NodeRef);
 
-const NEAR_THRESHOLD: f32 = 100.0;
 /// Basic GraphEditor components
 /// The following limitations apply
 /// - NodeFinder is the default
@@ -47,8 +45,6 @@ where
     // /// Nodes are drawn in this order. Draw order is important because nodes
     // /// that are drawn last are on top.
     // pub node_order: Vec<NodeId>,
-    /// An ongoing connection interaction: The mouse has dragged away from a
-    /// port and the user is holding the click
     connection_in_progress: ConnectionInProgress,
     /// The currently selected node. Some interface actions depend on the
     /// currently selected node.
@@ -59,10 +55,8 @@ where
     /// The position of each node.
     node_positions: SecondaryMap<NodeId, crate::Vec2>,
 
-    /// The position of each port.
-    port_refs: PortsRef,
+    port_refs: PortRefs,
 
-    /// The node finder is used to create new nodes.
     node_finder: NodeFinder,
 
     // /// The panning of the graph viewport.
@@ -93,6 +87,8 @@ pub enum GraphMessage<NodeTemplate> {
         shift_key: bool,
     },
     Dragging(Vec2),
+    EnterPort(AnyParameterId),
+    LeavePort(AnyParameterId),
     DragEnd,
 
     // NodeFinder Event
@@ -176,17 +172,27 @@ where
                     .get(id)
                     .map(get_center)
                     .unwrap_or_default();
-                self.connection_in_progress = (id, pos).into();
+
+                if let AnyParameterId::Input(input) = id {
+                    if let Some(output) = self.graph.connections.borrow_mut().remove(input) {
+                        self.connection_in_progress = (output, pos).into();
+                    } else {
+                        self.connection_in_progress = (input, pos).into();
+                    }
+                } else {
+                    self.connection_in_progress = (id, pos).into();
+                }
+
                 false
             }
             GraphMessage::Dragging(mouse_pos) => {
                 // Connecting to port
                 if let ConnectionInProgress::FromInput {
-                    to: ConnectTo::Pos(pos),
+                    dest: ConnectTo::Pos(pos),
                     ..
                 }
                 | ConnectionInProgress::FromOutput {
-                    to: ConnectTo::Pos(pos),
+                    dest: ConnectTo::Pos(pos),
                     ..
                 } = &mut self.connection_in_progress
                 {
@@ -207,6 +213,21 @@ where
                     false
                 }
             }
+            GraphMessage::EnterPort(id) => {
+                self.connection_in_progress.to_id(id);
+                true
+            }
+            GraphMessage::LeavePort(id) => {
+                let offset = self.graph_ref.get_offset().unwrap_or_default();
+                let port_pos = self
+                    .port_refs
+                    .borrow()
+                    .get(id)
+                    .map(|n| get_center(n) - offset)
+                    .unwrap_or_default();
+                self.connection_in_progress.to_pos(port_pos);
+                false
+            }
             GraphMessage::DragEnd => {
                 self._drag_event = None;
                 self.mouse_on_node = None;
@@ -214,12 +235,12 @@ where
                 // Connect to Port
                 let connection = match self.connection_in_progress.take() {
                     ConnectionInProgress::FromInput {
-                        from: input,
-                        to: ConnectTo::Id(output),
+                        src: input,
+                        dest: ConnectTo::Id(output),
                     } => Some((output, input)),
                     ConnectionInProgress::FromOutput {
-                        from: output,
-                        to: ConnectTo::Id(input),
+                        src: output,
+                        dest: ConnectTo::Id(input),
                     } => Some((output, input)),
                     _ => None,
                 };
@@ -292,6 +313,8 @@ where
                     shift_key,
                 },
                 NodeEvent::Port(PortEvent::MouseDown(id)) => DragStartPort(id),
+                NodeEvent::Port(PortEvent::MouseEnter(id)) => EnterPort(id),
+                NodeEvent::Port(PortEvent::MouseLeave(id)) => LeavePort(id),
             });
             html! {<Node<NodeData, DataType, ValueType, UserState>
                 key={id.to_string()}
@@ -314,14 +337,14 @@ where
         let edges = self.graph_ref.get_offset().map(|offset|{
             let port_refs = self.port_refs.borrow();
             let connection_in_progress =match &self.connection_in_progress{
-                ConnectionInProgress::FromInput { from, to } => Some((
-                    to.map_pos(|id| port_refs.output.get(*id).map(get_center).unwrap_or_default()),
+                ConnectionInProgress::FromInput { src: from, dest: to } => Some((
+                    to.map_pos(|id| port_refs.output.get(*id).map(|n| get_center(n)-offset).unwrap_or_default()),
                     port_refs.input.get(*from).map(|n| get_center(n)-offset).unwrap_or_default(),
                     self.graph.inputs.borrow()[*from].typ.clone()
                 )),
-                ConnectionInProgress::FromOutput { from, to } => Some((
+                ConnectionInProgress::FromOutput { src: from, dest: to } => Some((
                     port_refs.output.get(*from).map(|n| get_center(n)-offset).unwrap_or_default(),
-                    to.map_pos(|id| port_refs.input.get(*id).map(get_center).unwrap_or_default()),
+                    to.map_pos(|id| port_refs.input.get(*id).map(|n| get_center(n)-offset).unwrap_or_default()),
                     self.graph.outputs.borrow()[*from].typ.clone()
                 )),
                 ConnectionInProgress::None => Option::None,
@@ -332,7 +355,6 @@ where
                 }
             });
 
-    
             let connections = self.graph.connections();
             let edges = connections.iter().map(|(input, output)| {
                 let typ = self.graph.input(input).typ.clone();
@@ -348,7 +370,7 @@ where
                     .get(input)
                     .map(get_center)
                     .unwrap_or_default();
-                html! {<Edge<DataType> key={output.to_string()} output={output_pos-offset} input={input_pos-offset} {typ} />}
+                html! {<Edge<DataType> key={input.to_string()} output={output_pos-offset} input={input_pos-offset} {typ} />}
             });
 
             html! {

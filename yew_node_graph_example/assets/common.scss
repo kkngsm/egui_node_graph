@@ -3,6 +3,7 @@ $port-border: 0.2em;
 $node-border: 0.2em;
 $node-padding-x: 0.6em;
 $edge-stroke-width: $port-size * 0.5;
+$node-lh: 1.4em;
 
 @use "sass:math";
 $port-shift: math.div(-$port-size - $node-border, 2);
@@ -13,6 +14,7 @@ $port-shift: math.div(-$port-size - $node-border, 2);
 }
 
 .node{
+    line-height: $node-lh;
     white-space: nowrap;
     display: grid;
     border: $node-border solid;
@@ -34,24 +36,24 @@ $port-shift: math.div(-$port-size - $node-border, 2);
 .ports{
     &[data-io="input"]{
         grid-area: input;
-        .port-wrap{
+        .port-unit{
             justify-content: flex-start;
         }
         .port{
-            left: $port-shift;
+            left: ($node-lh + $node-border) * -0.5;
         }
     }
     &[data-io="output"]{
         grid-area: output;
-        .port-wrap{
+        .port-unit{
             justify-content: flex-end;
         }
         .port{
-            right: $port-shift;
+            right: ($node-lh + $node-border) * -0.5;
         }
     }
 }
-.port-wrap{
+.port-unit{
     display: flex;
 }
 
@@ -61,16 +63,22 @@ $port-shift: math.div(-$port-size - $node-border, 2);
 
 .port{
     display: inline-block;
-    box-sizing: border-box;
-    width: $port-size;
-    height: $port-size;
-    border-radius: 50%;
-    margin: auto 0;
-    &[data-is-should-draw="true"]{
-        border: $port-border solid;
-    }
     position: absolute;
-    margin: calc(0.5em - #{$port-size} / 2) 0;
+    width: $node-lh;
+    height: $node-lh;
+    &::after{
+        content: "";
+        display: inline-block;
+        box-sizing: border-box;
+        width: $port-size;
+        height: $port-size;
+        border-radius: 50%;
+        border: solid $port-border;
+        margin: -$port-size * 0.5;
+        position: absolute;
+        top: 50%;
+        left:50%;
+    }
 }
 
 .edge{

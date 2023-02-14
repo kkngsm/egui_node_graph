@@ -23,20 +23,17 @@ $reddish_purple:rgb(204, 121, 167);
 }
 
 .port{
-    &[data-is-should-draw="true"]{
-        &[data-type="Scalar"]{
-            background-color: $skyblue;
-            border-color: $skyblue;
-        }
-        &[data-type="Vec2"] {
-            background-color: $reddish_purple;
-            border-color: $reddish_purple;
-        }
-        &:hover{
-            border-color: white;
-        }
+    &[data-type="Scalar"]::after{
+        background-color: $skyblue;
+        border-color: $skyblue;
     }
-
+    &[data-type="Vec2"]::after{
+        background-color: $reddish_purple;
+        border-color: $reddish_purple;
+    }
+    &:hover::after{
+        border-color: white;
+    }
 }
 .edge[data-type="Scalar"]{
     stroke: $skyblue;

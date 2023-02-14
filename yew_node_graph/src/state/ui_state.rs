@@ -22,6 +22,7 @@ impl PanZoom {
 }
 
 /// NodeFinder Status
+/// this is used to create new nodes.
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct NodeFinder {
@@ -29,7 +30,7 @@ pub struct NodeFinder {
     pub is_showing: bool,
 }
 
-use std::ops::Index;
+use std::{cell::RefCell, ops::Index, rc::Rc};
 
 use glam::Vec2;
 use slotmap::SecondaryMap;
@@ -76,22 +77,6 @@ impl<T> PortsData<T> {
             AnyParameterId::Output(id) => self.output.get_mut(id),
         }
     }
-
-    // /// Return ports that are within the threshold
-    // /// # Warning
-    // /// - It is not the closest port of all, since it returns when a port is found with a distance less than or equal to the threshold value.
-    // /// - For optimization, the threshold value is the square of the distance
-    // pub fn get_near_input(&self, pos: T, th: f32) -> Option<(InputId, &T)> {
-    //     self.input
-    //         .iter()
-    //         .find(|(_, port_pos)| port_pos.distance_squared(pos) < th)
-    // }
-    // /// Output version of [`get_near_input`]
-    // pub fn get_near_output(&self, pos: T, th: f32) -> Option<(OutputId, &T)> {
-    //     self.output
-    //         .iter()
-    //         .find(|(_, port_pos)| port_pos.distance_squared(pos) < th)
-    // }
 }
 
 impl<T> Index<InputId> for PortsData<T> {
@@ -119,12 +104,35 @@ impl<T> Index<AnyParameterId> for PortsData<T> {
         })
     }
 }
-#[derive(Debug, Clone)]
+
+/// [`yew::NodeRef`] of each port.
+pub type PortRefs = Rc<RefCell<PortsData<yew::NodeRef>>>;
+
+/// this have Port or free (mouse) where the connection is going.
+/// This is mainly used in [`ConnectionInProgress`]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ConnectTo<Id> {
     Id(Id),
     Pos(Vec2),
 }
 impl<Id> ConnectTo<Id> {
+    /// if [`ConnectTo::Pos`] return inner
+    /// if [`ConnectTo::Id`] execute the function of the argument and return the return value
+    ///
+    /// #Example
+    /// ```
+    /// use yew_node_graph::vec2;
+    /// use yew_node_graph::state::ConnectTo;
+    ///
+    /// let map = vec![vec2(11.0, 15.0)];
+    /// let connect_to_id = ConnectTo::Id(0usize);
+    ///
+    /// let f = |id: &usize| map[*id];
+    /// assert_eq!(connect_to_id.map_pos(f), vec2(11.0, 15.0));
+    ///
+    /// let connect_to_pos= ConnectTo::Pos(vec2(32.0, 24.0));
+    /// assert_eq!(connect_to_pos.map_pos(f), vec2(32.0, 24.0))
+    /// ```
     pub fn map_pos(&self, f: impl Fn(&Id) -> Vec2) -> Vec2 {
         match self {
             ConnectTo::Id(id) => f(id),
@@ -147,32 +155,95 @@ impl<Id> From<Vec2> for ConnectTo<Id> {
         Self::Pos(value)
     }
 }
-#[derive(Debug, Default, Clone)]
+
+/// An ongoing connection interaction: The mouse has dragged away from a
+/// port and the user is holding the click
+#[derive(Debug, Default, Clone, PartialEq)]
 pub enum ConnectionInProgress {
     FromInput {
-        from: InputId,
-        to: ConnectTo<OutputId>,
+        src: InputId,
+        dest: ConnectTo<OutputId>,
     },
     FromOutput {
-        from: OutputId,
-        to: ConnectTo<InputId>,
+        src: OutputId,
+        dest: ConnectTo<InputId>,
     },
     #[default]
     None,
 }
+
 impl ConnectionInProgress {
+    /// Set the destination to Port
+    /// #Example
+    /// ```
+    /// use yew_node_graph::{
+    ///     state::{ConnectTo, ConnectionInProgress, InputId, OutputId},
+    ///     vec2,
+    /// };
+    /// fn example(input: InputId, output: OutputId, another_input: InputId) {
+    ///     let mut connection_in_progress = ConnectionInProgress::FromInput {
+    ///         src: input,
+    ///         dest: ConnectTo::Pos(vec2(1.0, 2.0)),
+    ///     };
+    ///     connection_in_progress.to_id(output.into());
+    ///     assert_eq!(
+    ///         connection_in_progress,
+    ///         ConnectionInProgress::FromInput {
+    ///             src: input,
+    ///             dest: ConnectTo::Id(output),
+    ///         }
+    ///     );
+    ///
+    ///     // Do nothing if the following
+    ///
+    ///     // Inputs cannot be connected to inputs.
+    ///     connection_in_progress.to_id(another_input.into());
+    ///
+    ///     let mut connection_none = ConnectionInProgress::None;
+    ///     connection_none.to_id(output.into());
+    /// }
+    /// ```
     pub fn to_id(&mut self, id: AnyParameterId) {
         match (self, id) {
-            (ConnectionInProgress::FromInput { from, to }, AnyParameterId::Output(_)) => todo!(),
-            (ConnectionInProgress::FromOutput { from, to }, AnyParameterId::Input(_)) => todo!(),
-            _ => unreachable!(),
+            (ConnectionInProgress::FromInput { src: _, dest }, AnyParameterId::Output(id)) => {
+                *dest = id.into()
+            }
+            (ConnectionInProgress::FromOutput { src: _, dest }, AnyParameterId::Input(id)) => {
+                *dest = id.into()
+            }
+            _ => (),
         }
     }
-
+    /// Set the destination to Position
+    /// #Example
+    /// ```
+    /// use yew_node_graph::{
+    ///     state::{ConnectTo, ConnectionInProgress, InputId, OutputId},
+    ///     vec2,
+    /// };
+    /// fn example(input: InputId, output: OutputId) {
+    ///     let mut connection_in_progress = ConnectionInProgress::FromInput {
+    ///         src: input,
+    ///         dest: ConnectTo::Id(output),
+    ///     };
+    ///     connection_in_progress.to_pos(vec2(12.0, 34.0));
+    ///     assert_eq!(
+    ///         connection_in_progress,
+    ///         ConnectionInProgress::FromInput {
+    ///             src: input,
+    ///             dest: ConnectTo::Pos(vec2(12.0, 34.0)),
+    ///         }
+    ///     );
+    ///
+    ///     // Do nothing if the following
+    ///     let mut connection_none = ConnectionInProgress::None;
+    ///     connection_none.to_pos(vec2(53.0, 65.0));
+    /// }
+    /// ```
     pub fn to_pos(&mut self, pos: Vec2) {
         match self {
-            ConnectionInProgress::FromInput { from, to } => *to = pos.into(),
-            ConnectionInProgress::FromOutput { from, to } => *to = pos.into(),
+            ConnectionInProgress::FromInput { src: _, dest } => *dest = pos.into(),
+            ConnectionInProgress::FromOutput { src: _, dest } => *dest = pos.into(),
             ConnectionInProgress::None => (),
         }
     }
@@ -186,12 +257,12 @@ impl From<(AnyParameterId, Vec2)> for ConnectionInProgress {
     fn from((id, pos): (AnyParameterId, Vec2)) -> Self {
         match id {
             AnyParameterId::Input(id) => Self::FromInput {
-                from: id,
-                to: pos.into(),
+                src: id,
+                dest: pos.into(),
             },
             AnyParameterId::Output(id) => Self::FromOutput {
-                from: id,
-                to: pos.into(),
+                src: id,
+                dest: pos.into(),
             },
         }
     }
@@ -200,8 +271,8 @@ impl From<(AnyParameterId, Vec2)> for ConnectionInProgress {
 impl From<(OutputId, Vec2)> for ConnectionInProgress {
     fn from((id, pos): (OutputId, Vec2)) -> Self {
         Self::FromOutput {
-            from: id,
-            to: pos.into(),
+            src: id,
+            dest: pos.into(),
         }
     }
 }
@@ -209,8 +280,8 @@ impl From<(OutputId, Vec2)> for ConnectionInProgress {
 impl From<(InputId, Vec2)> for ConnectionInProgress {
     fn from((id, pos): (InputId, Vec2)) -> Self {
         Self::FromInput {
-            from: id,
-            to: pos.into(),
+            src: id,
+            dest: pos.into(),
         }
     }
 }
