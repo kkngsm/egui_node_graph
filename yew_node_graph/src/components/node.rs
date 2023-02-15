@@ -119,7 +119,7 @@ user-select:none;
                     move |e| {
                         e.stop_propagation();
                         onevent.emit(NodeEvent::DragStart {
-                            gap: get_offset_from_current_target(&e),
+                            shift: get_offset_from_current_target(&e),
                             shift_key: e.shift_key(),
                         })
                     }
@@ -155,7 +155,7 @@ user-select:none;
 
 #[derive(Debug, Clone)]
 pub enum NodeEvent {
-    DragStart { gap: Vec2, shift_key: bool },
+    DragStart { shift: Vec2, shift_key: bool },
     Select { shift_key: bool },
     Delete,
     Port(PortEvent),

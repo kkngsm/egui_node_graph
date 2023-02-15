@@ -37,15 +37,6 @@ use slotmap::SecondaryMap;
 
 use super::{AnyParameterId, InputId, NodeId, OutputId};
 
-// Information needed when dragging or selecting a node
-#[derive(Debug, Clone)]
-pub struct MousePosOnNode {
-    /// Id of mouse-on node
-    pub id: NodeId,
-    /// Position from top left of node
-    pub gap: Vec2,
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct PortsData<T> {
     pub input: SecondaryMap<InputId, T>,
@@ -158,7 +149,7 @@ impl<Id> From<Vec2> for ConnectTo<Id> {
 
 /// An ongoing connection interaction: The mouse has dragged away from a
 /// port and the user is holding the click
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionInProgress {
     FromInput {
         src: InputId,
@@ -168,8 +159,6 @@ pub enum ConnectionInProgress {
         src: OutputId,
         dest: ConnectTo<InputId>,
     },
-    #[default]
-    None,
 }
 
 impl ConnectionInProgress {
@@ -198,9 +187,6 @@ impl ConnectionInProgress {
     ///
     ///     // Inputs cannot be connected to inputs.
     ///     connection_in_progress.to_id(another_input.into());
-    ///
-    ///     let mut connection_none = ConnectionInProgress::None;
-    ///     connection_none.to_id(output.into());
     /// }
     /// ```
     pub fn to_id(&mut self, id: AnyParameterId) {
@@ -234,17 +220,51 @@ impl ConnectionInProgress {
     ///             dest: ConnectTo::Pos(vec2(12.0, 34.0)),
     ///         }
     ///     );
-    ///
-    ///     // Do nothing if the following
-    ///     let mut connection_none = ConnectionInProgress::None;
-    ///     connection_none.to_pos(vec2(53.0, 65.0));
-    /// }
     /// ```
     pub fn to_pos(&mut self, pos: Vec2) {
         match self {
             ConnectionInProgress::FromInput { src: _, dest } => *dest = pos.into(),
             ConnectionInProgress::FromOutput { src: _, dest } => *dest = pos.into(),
-            ConnectionInProgress::None => (),
+        }
+    }
+    /// Returns Output/Input pairs
+    /// # Example
+    /// ```
+    /// use yew_node_graph::{
+    ///     state::{
+    ///         ConnectTo, ConnectionInProgress, InputId, OutputId,
+    ///         AnyParameterId
+    ///     },
+    ///     vec2,
+    /// };
+    /// fn example(input: InputId, output: OutputId, another_input: InputId) {
+    ///     let mut connection_in_progress = ConnectionInProgress::FromInput {
+    ///         src: input,
+    ///         dest: ConnectTo::Pos(vec2(12.0, 3.0)),
+    ///     };
+    ///
+    ///     assert_eq!(
+    ///         connection_in_progress.pair_with(AnyParameterId::Output(output)),
+    ///         Some((output,input))
+    ///     );
+    ///     // Inputs cannot be connected to inputs.
+    ///     assert_eq!(
+    ///         connection_in_progress.pair_with(AnyParameterId::Input(another_input)),
+    ///         None
+    ///     )
+    /// }
+    /// ```
+    pub fn pair(&self) -> Option<(&OutputId, &InputId)> {
+        match self {
+            ConnectionInProgress::FromInput {
+                src: input,
+                dest: ConnectTo::Id(output),
+            } => Some((output, input)),
+            ConnectionInProgress::FromOutput {
+                src: output,
+                dest: ConnectTo::Id(input),
+            } => Some((output, input)),
+            _ => None,
         }
     }
 
@@ -265,17 +285,17 @@ impl ConnectionInProgress {
     ///     };
     ///
     ///     assert_eq!(
-    ///         connection_in_progress.connection_pair(AnyParameterId::Output(output)),
+    ///         connection_in_progress.pair_with(AnyParameterId::Output(output)),
     ///         Some((output,input))
     ///     );
     ///     // Inputs cannot be connected to inputs.
     ///     assert_eq!(
-    ///         connection_in_progress.connection_pair(AnyParameterId::Input(another_input)),
+    ///         connection_in_progress.pair_with(AnyParameterId::Input(another_input)),
     ///         None
     ///     )
     /// }
     /// ```
-    pub fn connection_pair(&self, id: AnyParameterId) -> Option<(OutputId, InputId)> {
+    pub fn pair_with(&self, id: AnyParameterId) -> Option<(OutputId, InputId)> {
         match (self, id) {
             (
                 ConnectionInProgress::FromInput {
@@ -293,10 +313,6 @@ impl ConnectionInProgress {
             ) => Some((*output, input)),
             _ => None,
         }
-    }
-
-    pub fn take(&mut self) -> Self {
-        std::mem::take(self)
     }
 }
 
@@ -331,4 +347,19 @@ impl From<(InputId, Vec2)> for ConnectionInProgress {
             dest: pos.into(),
         }
     }
+}
+
+#[derive(Clone)]
+pub enum DragState {
+    SelectBox {
+        start: Vec2,
+        end: Vec2,
+    },
+    MoveNode {
+        id: NodeId,
+        shift: Vec2,
+        is_moved: bool,
+        is_shift_key_pressed: bool,
+    },
+    ConnectPort(ConnectionInProgress),
 }

@@ -37,10 +37,11 @@ pub fn graph_area(
                 Box::new({
                     let onevent = onevent.clone();
                     move |e| {
-                        onevent.emit(BackgroundEvent::MouseDown(
-                            e.button(),
-                            get_offset_from_current_target(&e),
-                        ))
+                        onevent.emit(BackgroundEvent::MouseDown {
+                            button: e.button(),
+                            pos: get_offset_from_current_target(&e),
+                            is_shift_key_pressed: e.shift_key(),
+                        })
                     }
                 }),
             ),
@@ -64,5 +65,9 @@ position:relative;
 #[derive(Debug)]
 pub enum BackgroundEvent {
     ContextMenu(Vec2),
-    MouseDown(i16, Vec2),
+    MouseDown {
+        button: i16,
+        pos: Vec2,
+        is_shift_key_pressed: bool,
+    },
 }
