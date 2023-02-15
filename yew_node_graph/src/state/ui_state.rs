@@ -227,7 +227,7 @@ impl ConnectionInProgress {
             ConnectionInProgress::FromOutput { src: _, dest } => *dest = pos.into(),
         }
     }
-    /// Returns Output/Input pairs
+    /// If an output/input pair is created between src and dest, it is returned.
     /// # Example
     /// ```
     /// use yew_node_graph::{
@@ -237,21 +237,25 @@ impl ConnectionInProgress {
     ///     },
     ///     vec2,
     /// };
-    /// fn example(input: InputId, output: OutputId, another_input: InputId) {
+    /// fn example(input: InputId, output: OutputId) {
     ///     let mut connection_in_progress = ConnectionInProgress::FromInput {
     ///         src: input,
-    ///         dest: ConnectTo::Pos(vec2(12.0, 3.0)),
+    ///         dest: ConnectTo::Id(output),
     ///     };
     ///
     ///     assert_eq!(
-    ///         connection_in_progress.pair_with(AnyParameterId::Output(output)),
-    ///         Some((output,input))
+    ///         connection_in_progress.pair(),
+    ///         Some((&output,&input))
     ///     );
-    ///     // Inputs cannot be connected to inputs.
+    ///
+    ///     // if dest is pos, return None.
     ///     assert_eq!(
-    ///         connection_in_progress.pair_with(AnyParameterId::Input(another_input)),
+    ///          ConnectionInProgress::FromInput {
+    ///             src: input,
+    ///             dest: ConnectTo::Pos(vec2(0.0,0.0)),
+    ///         }.pair(),
     ///         None
-    ///     )
+    ///     );
     /// }
     /// ```
     pub fn pair(&self) -> Option<(&OutputId, &InputId)> {
@@ -268,7 +272,7 @@ impl ConnectionInProgress {
         }
     }
 
-    /// Returns Output/Input pairs
+    ///　If an output/input pair is created between the argument and itself's src, it is returned.
     /// # Example
     /// ```
     /// use yew_node_graph::{
