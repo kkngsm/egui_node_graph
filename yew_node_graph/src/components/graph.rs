@@ -33,11 +33,14 @@ pub fn graph_area(
                 }),
             ),
             (
-                "click",
+                "mousedown",
                 Box::new({
                     let onevent = onevent.clone();
                     move |e| {
-                        onevent.emit(BackgroundEvent::Click(get_offset_from_current_target(&e)))
+                        onevent.emit(BackgroundEvent::MouseDown(
+                            e.button(),
+                            get_offset_from_current_target(&e),
+                        ))
                     }
                 }),
             ),
@@ -52,7 +55,6 @@ position:relative;
         <div
             ref={node_ref}
             class={classes![graph_area,"graph-area"]}
-
         >
             { for children.iter() }
         </div>
@@ -62,5 +64,5 @@ position:relative;
 #[derive(Debug)]
 pub enum BackgroundEvent {
     ContextMenu(Vec2),
-    Click(Vec2),
+    MouseDown(i16, Vec2),
 }

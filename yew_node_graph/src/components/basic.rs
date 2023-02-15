@@ -10,6 +10,7 @@ use crate::components::edge::Edge;
 use crate::components::graph::{BackgroundEvent, GraphArea};
 use crate::components::node::{Node, NodeEvent};
 use crate::components::port::PortEvent;
+use crate::components::select_box::SelectBox;
 use crate::state::{
     AnyParameterId, ConnectTo, ConnectionInProgress, Graph, MousePosOnNode, NodeFinder, NodeId,
     NodeTemplateIter, NodeTemplateTrait, PortRefs, WidgetValueTrait,
@@ -50,8 +51,9 @@ where
     /// currently selected node.
     selected_nodes: HashSet<NodeId>,
 
-    // /// The mouse drag start position for an ongoing box selection.
-    // pub ongoing_box_selection: Option<crate::Vec2>,
+    /// The mouse drag start position for an ongoing box selection.
+    ongoing_box_selection: Option<(crate::Vec2, Vec2)>,
+
     /// The position of each node.
     node_positions: SecondaryMap<NodeId, crate::Vec2>,
 
@@ -86,6 +88,8 @@ pub enum GraphMessage<NodeTemplate> {
         data: MousePosOnNode,
         shift_key: bool,
     },
+    DragStartBackground(Vec2),
+
     Dragging(Vec2),
     EnterPort(AnyParameterId),
     LeavePort(AnyParameterId),
@@ -94,8 +98,6 @@ pub enum GraphMessage<NodeTemplate> {
     // NodeFinder Event
     OpenNodeFinder(Vec2),
     CreateNode(NodeTemplate),
-
-    BackgroundClick,
 
     None,
 }
@@ -128,6 +130,7 @@ where
         Self {
             graph: Default::default(),
             selected_nodes: Default::default(),
+            ongoing_box_selection: Default::default(),
             connection_in_progress: Default::default(),
             node_positions: Default::default(),
             port_refs: Default::default(),
@@ -185,6 +188,19 @@ where
 
                 false
             }
+            GraphMessage::DragStartBackground(pos) => {
+                self.set_drag_event(ctx.link().callback(|msg| msg));
+                let mut changed = false;
+
+                changed |= if self.selected_nodes.is_empty() {
+                    false
+                } else {
+                    self.selected_nodes.clear();
+                    true
+                };
+                self.ongoing_box_selection = Some((pos, pos));
+                changed
+            }
             GraphMessage::Dragging(mouse_pos) => {
                 // Connecting to port
                 if let ConnectionInProgress::FromInput {
@@ -208,6 +224,9 @@ where
                         let id = *id;
                         self.node_positions[id] += drag_delta;
                     }
+                    true
+                } else if let Some((_, pos)) = self.ongoing_box_selection.as_mut() {
+                    *pos = mouse_pos;
                     true
                 } else {
                     false
@@ -245,6 +264,7 @@ where
             GraphMessage::DragEnd => {
                 self._drag_event = None;
                 self.mouse_on_node = None;
+                self.node_finder.is_showing = false;
 
                 // Connect to Port
                 let connection = match self.connection_in_progress.take() {
@@ -262,6 +282,18 @@ where
                     if self.graph.param_typ_eq(output, input) {
                         self.graph.connections_mut().insert(input, output);
                     }
+                }
+
+                if let Some((start, end)) = self.ongoing_box_selection {
+                    let min = start.min(end);
+                    let max = start.max(end);
+                    log::debug!("{}, {}", min, max);
+                    for id in self.node_positions.iter().flat_map(|(id, pos)| {
+                        (min.cmplt(*pos).all() && pos.cmplt(max).all()).then(|| id)
+                    }) {
+                        self.selected_nodes.insert(id);
+                    }
+                    self.ongoing_box_selection = None;
                 }
                 true
             }
@@ -293,24 +325,6 @@ where
                 self.node_finder.is_showing = true;
                 self.node_finder.pos = pos;
                 true
-            }
-            GraphMessage::BackgroundClick => {
-                let mut changed = false;
-                let is_showing = &mut self.node_finder.is_showing;
-                changed |= if *is_showing {
-                    *is_showing = false;
-                    true
-                } else {
-                    false
-                };
-
-                changed |= if self.selected_nodes.is_empty() {
-                    false
-                } else {
-                    self.selected_nodes.clear();
-                    true
-                };
-                changed
             }
             GraphMessage::None => false,
         }
@@ -346,7 +360,8 @@ where
 
         let background_event = ctx.link().callback(|e: BackgroundEvent| match e {
             BackgroundEvent::ContextMenu(pos) => OpenNodeFinder(pos),
-            BackgroundEvent::Click(_) => BackgroundClick,
+            BackgroundEvent::MouseDown(button, pos) if button != 2 => DragStartBackground(pos),
+            _ => None,
         });
         let edges = self.graph_ref.get_offset().map(|offset|{
             let port_refs = self.port_refs.borrow();
@@ -395,6 +410,12 @@ where
             }
         });
 
+        let select_box = self.ongoing_box_selection.map(|(start, end)| {
+            html! {
+                <SelectBox {start} {end} />
+            }
+        });
+
         html! {
             <GraphArea
                 node_ref={self.graph_ref.clone()}
@@ -402,6 +423,7 @@ where
             >
             {for nodes}
             {edges}
+            {select_box}
             <BasicNodeFinder<NodeTemplate, UserState>
                 is_showing={self.node_finder.is_showing}
                 pos={self.node_finder.pos}

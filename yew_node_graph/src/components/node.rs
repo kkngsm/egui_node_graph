@@ -117,6 +117,7 @@ user-select:none;
                 Box::new({
                     let onevent = onevent.clone();
                     move |e| {
+                        e.stop_propagation();
                         onevent.emit(NodeEvent::DragStart {
                             gap: get_offset_from_current_target(&e),
                             shift_key: e.shift_key(),
