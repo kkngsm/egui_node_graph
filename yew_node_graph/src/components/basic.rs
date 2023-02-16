@@ -184,13 +184,7 @@ where
                     .unwrap_or_default();
 
                 if let AnyParameterId::Input(input) = id {
-                    if let Some(output) = self
-                        .graph
-                        .borrow_mut()
-                        .connections
-                        .borrow_mut()
-                        .remove(input)
-                    {
+                    if let Some(output) = self.graph.borrow_mut().connections.remove(input) {
                         self.drag_event = Some(DragState::ConnectPort((output, pos).into()));
                     } else {
                         self.drag_event = Some(DragState::ConnectPort((input, pos).into()));
@@ -287,6 +281,7 @@ where
             GraphMessage::DragEnd => {
                 self._drag_event_listener = None;
                 self.node_finder.is_showing = false;
+                let mut graph = self.graph.borrow_mut();
                 match self.drag_event.take() {
                     Some(DragState::SelectBox { start, end }) => {
                         let min = start.min(end);
@@ -300,8 +295,8 @@ where
                     Some(DragState::ConnectPort(c)) => {
                         // Connect to Port
                         if let Some((&output, &input)) = c.pair() {
-                            if self.graph.borrow().param_typ_eq(output, input) {
-                                self.graph.borrow().connections_mut().insert(input, output);
+                            if graph.param_typ_eq(output, input) {
+                                graph.connections.insert(input, output);
                             }
                         }
                     }
@@ -422,7 +417,7 @@ where
                                 .get(*from)
                                 .map(|n| get_center(n) - offset)
                                 .unwrap_or_default(),
-                            graph.inputs.borrow()[*from].typ.clone(),
+                            graph.inputs[*from].typ.clone(),
                         )),
                         ConnectionInProgress::FromOutput {
                             src: from,
@@ -440,7 +435,7 @@ where
                                     .map(|n| get_center(n) - offset)
                                     .unwrap_or_default()
                             }),
-                            graph.outputs.borrow()[*from].typ.clone(),
+                            graph.outputs[*from].typ.clone(),
                         )),
                     };
                     connection_in_progress.map(|(output, input, typ)| {
@@ -458,9 +453,9 @@ where
                 }
                 _ => Option::None,
             };
-            let connections = graph.connections();
-            let edges = connections.iter().map(|(input, output)| {
-                let typ = graph.input(input).typ.clone();
+            let graph = self.graph.borrow();
+            let edges = graph.connections.iter().map(|(input, output)| {
+                let typ = self.graph.borrow().inputs[input].typ.clone();
                 let output_pos = self
                     .port_refs.borrow()
                     .output

@@ -183,12 +183,11 @@ where
     ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState> + 'static,
     UserState: 'static,
 {
-    let connections = graph.connections.borrow();
     let widgets = ports.iter().map(|(name, id)| {
         let id = *id;
         let node_data = node_data.clone();
-        let is_connected = connections.contains_key(id);
-        let param = graph.inputs.borrow()[id].clone();
+        let is_connected = graph.connections.contains_key(id);
+        let param = graph.inputs[id].clone();
         let user_state = user_state.clone();
         let node_ref = ports_ref.borrow()[id].clone();
         let onevent = onevent.clone();
@@ -231,7 +230,7 @@ where
     let widgets = ports.iter().map(|(name, id)| {
         let id = *id;
         let name = name.clone();
-        let param = graph.outputs.borrow()[id].clone();
+        let param = graph.outputs[id].clone();
         let typ = param.typ.clone();
         let node_ref = ports_ref.borrow()[id].clone();
         let onevent = onevent.clone();

@@ -78,13 +78,12 @@ pub struct OutputParam<DataType> {
 /// The [`Node`]s of the graph
 pub type Nodes<NodeData> = SlotMap<NodeId, Rc<Node<NodeData>>>;
 /// The [`InputParam`]s of the graph
-pub type InputParams<DataType, ValueType> =
-    Rc<RefCell<SlotMap<InputId, Rc<InputParam<DataType, ValueType>>>>>;
+pub type InputParams<DataType, ValueType> = SlotMap<InputId, Rc<InputParam<DataType, ValueType>>>;
 /// The [`OutputParam`]s of the graph
-pub type OutputParams<DataType> = Rc<RefCell<SlotMap<OutputId, Rc<OutputParam<DataType>>>>>;
+pub type OutputParams<DataType> = SlotMap<OutputId, Rc<OutputParam<DataType>>>;
 // Connects the input of a node, to the output of its predecessor that
 // produces it
-pub type Connections = Rc<RefCell<SecondaryMap<InputId, OutputId>>>;
+pub type Connections = SecondaryMap<InputId, OutputId>;
 
 /// The graph, containing nodes, input parameters and output parameters. Because
 /// graphs are full of self-referential structures, this type uses the `slotmap`
