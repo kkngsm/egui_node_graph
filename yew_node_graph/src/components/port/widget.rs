@@ -1,9 +1,6 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use yew::{
-    function_component, html, Html,
-    Properties,
-};
+use yew::{function_component, html, Html, Properties};
 
 use crate::state::{InputParam, NodeId, OutputParam, WidgetValueTrait};
 
@@ -35,12 +32,9 @@ where
     let widget = if *is_connected {
         html! {name.as_str()}
     } else {
-        param.value.value_widget(
-            name.as_str(),
-            *node_id,
-            &mut *user_state.borrow_mut(),
-            node_data,
-        )
+        param
+            .value
+            .value_widget(name.as_str(), *node_id, user_state.clone(), node_data)
     };
     html! {
         <div

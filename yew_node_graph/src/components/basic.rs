@@ -12,8 +12,8 @@ use crate::components::node::{Node, NodeEvent};
 use crate::components::port::PortEvent;
 use crate::components::select_box::SelectBox;
 use crate::state::{
-    AnyParameterId, ConnectTo, ConnectionInProgress, DragState, Graph, NodeFinder, NodeId,
-    NodeTemplateIter, NodeTemplateTrait, PortRefs, WidgetValueTrait,
+    AnyParameterId, ConnectTo, ConnectionInProgress, DragState, Graph, NodeDataTrait, NodeFinder,
+    NodeId, NodeTemplateIter, NodeTemplateTrait, PortRefs, WidgetValueTrait,
 };
 use crate::utils::{get_center, get_offset_from_current_target};
 use crate::Vec2;
@@ -41,7 +41,7 @@ where
     NodeTemplate: 'static,
     UserState: 'static,
 {
-    graph: Graph<NodeData, DataType, ValueType>,
+    graph: Rc<RefCell<Graph<NodeData, DataType, ValueType>>>,
     //TODO
     // /// Nodes are drawn in this order. Draw order is important because nodes
     // /// that are drawn last are on top.
@@ -110,6 +110,7 @@ pub struct BasicGraphEditorProps<UserState: PartialEq> {
 impl<NodeData, DataType, ValueType, NodeTemplate, UserState> Component
     for BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate, UserState>
 where
+    NodeData: NodeDataTrait<DataType = DataType, ValueType = ValueType, UserState = UserState>,
     UserState: PartialEq,
     NodeTemplate: NodeTemplateTrait<
             NodeData = NodeData,
@@ -154,7 +155,7 @@ where
                 true
             }
             GraphMessage::DeleteNode { id } => {
-                let (_node, _disc_events) = self.graph.remove_node(id);
+                let (_node, _disc_events) = self.graph.borrow_mut().remove_node(id);
                 true
             }
             GraphMessage::DragStartNode {
@@ -183,7 +184,13 @@ where
                     .unwrap_or_default();
 
                 if let AnyParameterId::Input(input) = id {
-                    if let Some(output) = self.graph.connections.borrow_mut().remove(input) {
+                    if let Some(output) = self
+                        .graph
+                        .borrow_mut()
+                        .connections
+                        .borrow_mut()
+                        .remove(input)
+                    {
                         self.drag_event = Some(DragState::ConnectPort((output, pos).into()));
                     } else {
                         self.drag_event = Some(DragState::ConnectPort((input, pos).into()));
@@ -249,7 +256,7 @@ where
                 if let Some(DragState::ConnectPort(c)) = self.drag_event.as_mut() {
                     let typ_eq = c
                         .pair_with(id)
-                        .map(|(output, input)| self.graph.param_typ_eq(output, input))
+                        .map(|(output, input)| self.graph.borrow().param_typ_eq(output, input))
                         .unwrap_or_default();
                     if typ_eq {
                         c.to_id(id);
@@ -262,7 +269,7 @@ where
                 if let Some(DragState::ConnectPort(c)) = self.drag_event.as_mut() {
                     let typ_eq = c
                         .pair_with(id)
-                        .map(|(output, input)| self.graph.param_typ_eq(output, input))
+                        .map(|(output, input)| self.graph.borrow().param_typ_eq(output, input))
                         .unwrap_or_default();
                     if typ_eq {
                         let offset = self.graph_ref.get_offset().unwrap_or_default();
@@ -293,8 +300,8 @@ where
                     Some(DragState::ConnectPort(c)) => {
                         // Connect to Port
                         if let Some((&output, &input)) = c.pair() {
-                            if self.graph.param_typ_eq(output, input) {
-                                self.graph.connections_mut().insert(input, output);
+                            if self.graph.borrow().param_typ_eq(output, input) {
+                                self.graph.borrow().connections_mut().insert(input, output);
                             }
                         }
                     }
@@ -321,7 +328,7 @@ where
                 true
             }
             GraphMessage::CreateNode(template) => {
-                let new_node = self.graph.add_node(
+                let new_node = self.graph.borrow_mut().add_node(
                     template.node_graph_label(user_state),
                     template.user_data(user_state),
                     |graph, node_id| template.build_node(graph, user_state, node_id),
@@ -329,7 +336,7 @@ where
                 self.node_positions.insert(new_node, self.node_finder.pos);
                 self.selected_nodes.insert(new_node);
 
-                let node = &self.graph[new_node];
+                let node = &self.graph.borrow()[new_node];
                 for input in node.input_ids() {
                     self.port_refs
                         .borrow_mut()
@@ -355,7 +362,8 @@ where
     fn view(&self, ctx: &Context<Self>) -> Html {
         use GraphMessage::*;
         let BasicGraphEditorProps { user_state } = ctx.props();
-        let nodes = self.graph.nodes.keys().map(|id| {
+        let graph = self.graph.borrow();
+        let nodes = graph.nodes.keys().map(|id| {
             let node_event = ctx.link().callback(move |e| match e {
                 NodeEvent::Select { shift_key } => SelectNode { id, shift_key },
                 NodeEvent::Delete => DeleteNode { id },
@@ -370,14 +378,12 @@ where
             });
             html! {<Node<NodeData, DataType, ValueType, UserState>
                 key={id.to_string()}
-                data={self.graph[id].clone()}
+                data={graph[id].clone()}
                 pos={self.node_positions[id]}
                 is_selected={self.selected_nodes.contains(&id)}
                 onevent={node_event}
                 {user_state}
-                input_params={self.graph.inputs.clone()}
-                output_params={self.graph.outputs.clone()}
-                connections={self.graph.connections.clone()}
+                graph={self.graph.clone()}
                 ports_ref={self.port_refs.clone()}
             />}
         });
@@ -416,7 +422,7 @@ where
                                 .get(*from)
                                 .map(|n| get_center(n) - offset)
                                 .unwrap_or_default(),
-                            self.graph.inputs.borrow()[*from].typ.clone(),
+                            graph.inputs.borrow()[*from].typ.clone(),
                         )),
                         ConnectionInProgress::FromOutput {
                             src: from,
@@ -434,7 +440,7 @@ where
                                     .map(|n| get_center(n) - offset)
                                     .unwrap_or_default()
                             }),
-                            self.graph.outputs.borrow()[*from].typ.clone(),
+                            graph.outputs.borrow()[*from].typ.clone(),
                         )),
                     };
                     connection_in_progress.map(|(output, input, typ)| {
@@ -452,9 +458,9 @@ where
                 }
                 _ => Option::None,
             };
-            let connections = self.graph.connections();
+            let connections = graph.connections();
             let edges = connections.iter().map(|(input, output)| {
-                let typ = self.graph.input(input).typ.clone();
+                let typ = graph.input(input).typ.clone();
                 let output_pos = self
                     .port_refs.borrow()
                     .output

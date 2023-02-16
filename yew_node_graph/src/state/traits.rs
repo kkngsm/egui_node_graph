@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use yew::Html;
 
 use super::*;
@@ -25,7 +27,7 @@ pub trait WidgetValueTrait {
         &self,
         param_name: &str,
         node_id: NodeId,
-        user_state: &mut Self::UserState,
+        user_state: Rc<RefCell<Self::UserState>>,
         node_data: &Self::NodeData,
     ) -> Html;
 }
@@ -71,8 +73,8 @@ pub trait NodeDataTrait
 where
     Self: Sized,
 {
-    /// Must be set to the custom user `NodeResponse` type
-    type Response;
+    // /// Must be set to the custom user `NodeResponse` type
+    // type Response;
     /// Must be set to the custom user `UserState` type
     type UserState;
     /// Must be set to the custom user `DataType` type
@@ -80,26 +82,13 @@ where
     /// Must be set to the custom user `ValueType` type
     type ValueType;
 
-    // TODO
     // /// Additional UI elements to draw in the nodes, after the parameters.
-    // fn bottom_ui(
-    //     &self,
-    //     ui: &mut egui::Ui,
-    //     node_id: NodeId,
-    //     graph: &Graph<Self, Self::DataType, Self::ValueType>,
-    //     user_state: &mut Self::UserState,
-    // ) -> Vec<NodeResponse<Self::Response, Self>>
-    // where
-    //     Self::Response: UserResponseTrait;
-
-    // fn can_delete(
-    //     &self,
-    //     _node_id: NodeId,
-    //     _graph: &Graph<Self, Self::DataType, Self::ValueType>,
-    //     _user_state: &mut Self::UserState,
-    // ) -> bool {
-    //     true
-    // }
+    fn bottom_ui(
+        &self,
+        node_id: NodeId,
+        graph: &Graph<Self, Self::DataType, Self::ValueType>,
+        user_state: Rc<RefCell<Self::UserState>>,
+    ) -> Html;
 }
 
 /// This trait can be implemented by any user type. The trait tells the library
@@ -148,6 +137,6 @@ pub trait NodeTemplateTrait: Clone {
     );
 }
 
-/// The custom user response types when drawing nodes in the graph must
-/// implement this trait.
-pub trait UserResponseTrait: Clone + std::fmt::Debug {}
+// /// The custom user response types when drawing nodes in the graph must
+// /// implement this trait.
+// pub trait UserResponseTrait: Clone + std::fmt::Debug {}

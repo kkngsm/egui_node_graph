@@ -2,8 +2,8 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{
     state::{
-        Connections, InputId, InputParams, NodeId, OutputId, OutputParams, PortRefs,
-        WidgetValueTrait,
+        Connections, Graph, InputId, InputParams, NodeDataTrait, NodeId, OutputId, OutputParams,
+        PortRefs, WidgetValueTrait,
     },
     utils::{get_offset_from_current_target, use_event_listeners},
     Vec2,
@@ -18,32 +18,31 @@ use super::port::{
 };
 
 #[derive(Properties)]
-pub struct NodeProps<NodeData, DataType, ValueType, UserState> {
+pub struct NodeProps<NodeData, DataType, ValueType, UserState>
+where
+    UserState: PartialEq,
+{
     pub data: Rc<crate::state::Node<NodeData>>,
     pub pos: Vec2,
     #[prop_or_default]
     pub is_selected: bool,
     pub onevent: Callback<NodeEvent>,
 
-    pub input_params: InputParams<DataType, ValueType>,
-    pub output_params: OutputParams<DataType>,
-    pub connections: Connections,
+    pub graph: Rc<RefCell<Graph<NodeData, DataType, ValueType>>>,
     pub ports_ref: PortRefs,
     pub user_state: Rc<RefCell<UserState>>,
 }
 impl<NodeData, DataType, ValueType, UserState> PartialEq
     for NodeProps<NodeData, DataType, ValueType, UserState>
+where
+    UserState: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.data, &other.data)
             && self.pos == other.pos
             && self.is_selected == other.is_selected
             && self.onevent == other.onevent
-        // The following always return True, because RefCell is used.
-        // && Rc::ptr_eq(&self.input_params, &other.input_params)
-        // && Rc::ptr_eq(&self.output_params, &other.output_params)
-        // && Rc::ptr_eq(&self.connections, &other.connections)
-        // && Rc::ptr_eq(&self.user_state, &other.user_state)
+            && self.user_state == self.user_state
     }
 }
 
@@ -64,18 +63,18 @@ pub fn node<NodeData, DataType, ValueType, UserState>(
         pos,
         is_selected,
         user_state,
-        input_params,
-        output_params,
-        connections,
+        graph,
         ports_ref,
     }: &NodeProps<NodeData, DataType, ValueType, UserState>,
 ) -> Html
 where
-    NodeData: 'static,
+    NodeData:
+        NodeDataTrait<DataType = DataType, ValueType = ValueType, UserState = UserState> + 'static,
     DataType: Display + PartialEq + Clone + 'static,
     ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState> + 'static,
-    UserState: 'static,
+    UserState: PartialEq + 'static,
 {
+    let graph = &*graph.borrow();
     let port_event = Callback::from({
         let onevent = onevent.clone();
         move |e| onevent.emit(NodeEvent::Port(e))
@@ -85,12 +84,11 @@ where
         data.id,
         &data.user_data,
         port_event.clone(),
-        input_params,
-        connections,
+        graph,
         ports_ref,
         user_state.clone(),
     );
-    let output_ports = output_ports(&data.outputs, port_event, output_params, ports_ref);
+    let output_ports = output_ports(&data.outputs, port_event, graph, ports_ref);
 
     let node = css! {r#"
 position:absolute;
@@ -127,6 +125,7 @@ user-select:none;
             ),
         ],
     );
+    let bottom_ui = data.user_data.bottom_ui(data.id, graph, user_state.clone());
     html! {
         <div
             ref={node_ref}
@@ -145,10 +144,11 @@ user-select:none;
                     e.stop_propagation();
                     onevent.emit(NodeEvent::Delete)
                 }}}
-            >{"×"}</button>
+            >{"x"}</button>
             </div>
             {input_ports}
             {output_ports}
+            <div class={"bottom_ui"}>{bottom_ui}</div>
         </div>
     }
 }
@@ -173,8 +173,7 @@ pub fn input_ports<NodeData, DataType, ValueType, UserState>(
     node_id: NodeId,
     node_data: &Rc<NodeData>,
     onevent: Callback<PortEvent>,
-    input_params: &InputParams<DataType, ValueType>,
-    connections: &Connections,
+    graph: &Graph<NodeData, DataType, ValueType>,
     ports_ref: &PortRefs,
     user_state: Rc<RefCell<UserState>>,
 ) -> Html
@@ -184,12 +183,12 @@ where
     ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState> + 'static,
     UserState: 'static,
 {
-    let connections = connections.borrow();
+    let connections = graph.connections.borrow();
     let widgets = ports.iter().map(|(name, id)| {
         let id = *id;
         let node_data = node_data.clone();
         let is_connected = connections.contains_key(id);
-        let param = input_params.borrow()[id].clone();
+        let param = graph.inputs.borrow()[id].clone();
         let user_state = user_state.clone();
         let node_ref = ports_ref.borrow()[id].clone();
         let onevent = onevent.clone();
@@ -220,10 +219,10 @@ where
         </div>
     }
 }
-pub fn output_ports<DataType>(
+pub fn output_ports<NodeData, DataType, ValueType>(
     ports: &[(Rc<String>, OutputId)],
     onevent: Callback<PortEvent>,
-    params: &OutputParams<DataType>,
+    graph: &Graph<NodeData, DataType, ValueType>,
     ports_ref: &PortRefs,
 ) -> Html
 where
@@ -232,7 +231,7 @@ where
     let widgets = ports.iter().map(|(name, id)| {
         let id = *id;
         let name = name.clone();
-        let param = params.borrow()[id].clone();
+        let param = graph.outputs.borrow()[id].clone();
         let typ = param.typ.clone();
         let node_ref = ports_ref.borrow()[id].clone();
         let onevent = onevent.clone();

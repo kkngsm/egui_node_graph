@@ -19,10 +19,10 @@ $port-shift: math.div(-$port-size - $node-border, 2);
     display: grid;
     border: $node-border solid;
     grid-template:
-        "title delete"
-        "input input"
-        "output output"
-        "ui ui";
+    "title delete"
+    "input input"
+    "output output"
+    "ui ui";
 }
 
 .node-title{
@@ -81,6 +81,10 @@ $port-shift: math.div(-$port-size - $node-border, 2);
     }
 }
 
+.bottom_ui{
+    grid-area: ui;
+}
+
 .edge{
     stroke-width: $edge-stroke-width;
     stroke-linecap: round;
@@ -88,15 +92,11 @@ $port-shift: math.div(-$port-size - $node-border, 2);
 
 // ------------------------------------------
 
-.node-title{
+.node-title, .ports, .bottom_ui{
     padding: 0.25em $node-padding-x;
 }
 .node-delete{
     margin-left: 1em;
-}
-
-.ports{
-    padding: 0.25em $node-padding-x;
 }
 
 .node-graph-contextmenu{

@@ -6,7 +6,7 @@ use yew_node_graph::{
     components::basic::BasicGraphEditor,
     state::{
         DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId, NodeTemplateIter,
-        NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
+        NodeTemplateTrait, WidgetValueTrait,
     },
     *,
 };
@@ -272,8 +272,8 @@ impl WidgetValueTrait for MyValueType {
         &self,
         param_name: &str,
         _node_id: NodeId,
-        _user_state: &mut MyGraphState,
-        _node_data: &MyNodeData,
+        _user_state: Rc<RefCell<Self::UserState>>,
+        _node_data: &Self::NodeData,
     ) -> Html {
         fn get_value(e: InputEvent) -> f32 {
             let event_target = e.target().unwrap();
@@ -330,12 +330,12 @@ impl WidgetValueTrait for MyValueType {
     }
 }
 
-impl UserResponseTrait for MyResponse {}
+// impl UserResponseTrait for MyResponse {}
 impl NodeDataTrait for MyNodeData {
     type UserState = MyGraphState;
     type DataType = MyDataType;
     type ValueType = MyValueType;
-    type Response = MyResponse;
+    // type Response = MyResponse;
 
     // type Response = MyResponse;
     // This method will be called when drawing each node. This allows adding
@@ -343,46 +343,42 @@ impl NodeDataTrait for MyNodeData {
     // button which introduces the concept of having an active node in the
     // graph. This is done entirely from user code with no modifications to the
     // node graph library.
-    // fn bottom_ui(
-    //     &self,
-    //     ui: &mut egui::Ui,
-    //     node_id: NodeId,
-    //     _graph: &Graph<MyNodeData, MyDataType, MyValueType>,
-    //     user_state: &mut Self::UserState,
-    // ) -> Vec<NodeResponse<MyResponse, MyNodeData>>
-    // where
-    //     MyResponse: UserResponseTrait,
-    // {
-    //     // This logic is entirely up to the user. In this case, we check if the
-    //     // current node we're drawing is the active one, by comparing against
-    //     // the value stored in the global user state, and draw different button
-    //     // UIs based on that.
+    fn bottom_ui(
+        &self,
+        node_id: NodeId,
+        _graph: &Graph<MyNodeData, MyDataType, MyValueType>,
+        user_state: Rc<RefCell<Self::UserState>>,
+    ) -> Html {
+        // This logic is entirely up to the user. In this case, we check if the
+        // current node we're drawing is the active one, by comparing against
+        // the value stored in the global user state, and draw different button
+        // UIs based on that.
+        let is_active = user_state
+            .borrow()
+            .active_node
+            .map(|id| id == node_id)
+            .unwrap_or(false);
 
-    //     let mut responses = vec![];
-    //     let is_active = user_state
-    //         .active_node
-    //         .map(|id| id == node_id)
-    //         .unwrap_or(false);
-
-    //     // Pressing the button will emit a custom user response to either set,
-    //     // or clear the active node. These responses do nothing by themselves,
-    //     // the library only makes the responses available to you after the graph
-    //     // has been drawn. See below at the update method for an example.
-    //     if !is_active {
-    //         if ui.button("👁 Set active").clicked() {
-    //             responses.push(NodeResponse::User(MyResponse::SetActiveNode(node_id)));
-    //         }
-    //     } else {
-    //         let button =
-    //             egui::Button::new(egui::RichText::new("👁 Active").color(egui::Color32::BLACK))
-    //                 .fill(egui::Color32::GOLD);
-    //         if ui.add(button).clicked() {
-    //             responses.push(NodeResponse::User(MyResponse::ClearActiveNode));
-    //         }
-    //     }
-
-    //     responses
-    // }
+        // Pressing the button will emit a custom user response to either set,
+        // or clear the active node. These responses do nothing by themselves,
+        // the library only makes the responses available to you after the graph
+        // has been drawn. See below at the update method for an example.
+        if is_active {
+            html! {
+                <button onclick={
+                    let user_state = user_state.clone();
+                    move |_| user_state.borrow_mut().active_node = None
+                }>{"👁 Active"}</button>
+            }
+        } else {
+            html! {
+                <button onclick={
+                    let user_state = user_state.clone();
+                    move |_| user_state.borrow_mut().active_node = Some(node_id)
+                }>{"👁 Set active"}</button>
+            }
+        }
+    }
 }
 
 type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
