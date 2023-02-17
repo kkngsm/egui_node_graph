@@ -3,20 +3,24 @@ use wasm_bindgen::{closure::Closure, JsCast};
 use web_sys::{Element, MouseEvent};
 use yew::{hook, use_effect_with_deps, NodeRef};
 
-pub fn get_center(r: &NodeRef) -> Vec2 {
-    let element = r.cast::<web_sys::Element>().unwrap();
-    let rect = element.get_bounding_client_rect();
-    let x = (rect.left() + rect.right()) as f32 * 0.5;
-    let y = (rect.top() + rect.bottom()) as f32 * 0.5;
-    vec2(x, y)
+pub fn get_center(r: &NodeRef) -> Option<Vec2> {
+    r.cast::<web_sys::Element>().map(|e| {
+        let rect = e.get_bounding_client_rect();
+        let x = (rect.left() + rect.right()) as f32 * 0.5;
+        let y = (rect.top() + rect.bottom()) as f32 * 0.5;
+        vec2(x, y)
+    })
 }
 
-pub fn get_near<Id>(mouse_pos: Vec2, th: f32) -> impl Fn((Id, &NodeRef)) -> Option<(Id, Vec2)> {
-    move |(id, n)| {
-        let pos = get_center(n);
-        (pos.distance_squared(mouse_pos) < th).then_some((id, pos))
-    }
+pub fn get_offset(r: &NodeRef) -> Option<Vec2> {
+    r.cast::<web_sys::Element>().map(|e| {
+        let rect = e.get_bounding_client_rect();
+        let x = (rect.left()) as f32;
+        let y = (rect.top()) as f32;
+        vec2(x, y)
+    })
 }
+
 pub fn get_offset_from_target(e: &MouseEvent) -> Vec2 {
     if let Some(target) = e
         .target()

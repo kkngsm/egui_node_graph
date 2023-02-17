@@ -1,9 +1,4 @@
-use std::cell::RefCell;
-use std::collections::HashSet;
 use std::fmt::{Debug, Display};
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::rc::Rc;
 
 use crate::components::contextmenu::ContextMenu;
 use crate::components::edge::Edge;
@@ -11,59 +6,19 @@ use crate::components::graph::{BackgroundEvent, GraphArea};
 use crate::components::node::{Node, NodeEvent};
 use crate::components::port::PortEvent;
 use crate::components::select_box::SelectBox;
+use crate::state::basic::BasicGraphEditorState;
 use crate::state::{
-    AnyParameterId, ConnectTo, ConnectionInProgress, DragState, Graph, NodeDataTrait, NodeFinder,
-    NodeId, NodeTemplateIter, NodeTemplateTrait, PortRefs, UserResponseTrait, WidgetValueTrait,
+    AnyParameterId, ConnectTo, ConnectionInProgress, DragState, NodeDataTrait, NodeId,
+    NodeTemplateIter, NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
 };
-use crate::utils::{get_center, get_offset_from_current_target};
+use crate::utils::{get_center, get_offset, get_offset_from_current_target};
 use crate::Vec2;
-use glam::vec2;
-use gloo::events::EventListener;
-use gloo::utils::window;
-use slotmap::SecondaryMap;
+
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use yew::prelude::*;
 
-#[derive(Default)]
-pub struct GraphRef(NodeRef);
-
-/// Basic GraphEditor components
-/// The following limitations apply
-/// - NodeFinder is the default
-/// - UserState must implement PartialEq
-/// If you want a broader implementation, you may want to define your own components
-#[derive(Default)]
-pub struct BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate>
-where
-    NodeData: 'static,
-    DataType: 'static,
-    ValueType: 'static,
-{
-    graph: Rc<RefCell<Graph<NodeData, DataType, ValueType>>>,
-    //TODO
-    // /// Nodes are drawn in this order. Draw order is important because nodes
-    // /// that are drawn last are on top.
-    // pub node_order: Vec<NodeId>,
-    /// The currently selected node. Some interface actions depend on the
-    /// currently selected node.
-    selected_nodes: HashSet<NodeId>,
-
-    /// The position of each node.
-    node_positions: SecondaryMap<NodeId, crate::Vec2>,
-
-    port_refs: PortRefs,
-
-    node_finder: NodeFinder,
-
-    // /// The panning of the graph viewport.
-    // pub pan_zoom: PanZoom,
-    ///
-    graph_ref: GraphRef,
-
-    drag_event: Option<DragState>,
-    _drag_event_listener: Option<[EventListener; 2]>,
-
-    _template: PhantomData<fn() -> NodeTemplate>,
+pub struct BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate> {
+    state: BasicGraphEditorState<NodeData, DataType, ValueType, NodeTemplate>,
 }
 #[derive(Debug, Clone)]
 pub enum GraphMessage<NodeTemplate, UserResponse> {
@@ -109,61 +64,57 @@ pub struct BasicGraphEditorProps<UserState: PartialEq, UserResponse: PartialEq> 
 impl<NodeData, DataType, ValueType, NodeTemplate, UserState, UserResponse> Component
     for BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate>
 where
-    NodeData: NodeDataTrait<
-        DataType = DataType,
-        ValueType = ValueType,
-        UserState = UserState,
-        Response = UserResponse,
-    >,
-    UserState: Clone + PartialEq + 'static,
-    NodeTemplate: NodeTemplateTrait<
+    NodeData: 'static
+        + NodeDataTrait<
+            DataType = DataType,
+            ValueType = ValueType,
+            UserState = UserState,
+            Response = UserResponse,
+        >,
+    UserState: 'static + Clone + PartialEq,
+    NodeTemplate: 'static
+        + NodeTemplateTrait<
             NodeData = NodeData,
             DataType = DataType,
             ValueType = ValueType,
             UserState = UserState,
-        > + NodeTemplateIter<Item = NodeTemplate>
+        >
+        + NodeTemplateIter<Item = NodeTemplate>
         + PartialEq
         + Copy
-        + Debug
-        + 'static,
-    DataType: Display + PartialEq + Clone,
-    ValueType: WidgetValueTrait<UserState = UserState, NodeData = NodeData, Response = UserResponse>
+        + Debug,
+    DataType: 'static + Display + PartialEq + Clone,
+    ValueType: 'static
+        + WidgetValueTrait<UserState = UserState, NodeData = NodeData, Response = UserResponse>
         + Clone,
-    UserResponse: UserResponseTrait + 'static,
+    UserResponse: 'static + UserResponseTrait,
 {
     type Message = GraphMessage<NodeTemplate, UserResponse>;
     type Properties = BasicGraphEditorProps<UserState, UserResponse>;
     fn create(_ctx: &Context<Self>) -> Self {
         Self {
-            graph: Default::default(),
-            selected_nodes: Default::default(),
-            node_positions: Default::default(),
-            port_refs: Default::default(),
-            node_finder: Default::default(),
-            graph_ref: Default::default(),
-            drag_event: Default::default(),
-            _drag_event_listener: Default::default(),
-            _template: PhantomData,
+            state: Default::default(),
         }
     }
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
-        log::debug!("{:?}", &msg);
+        // log::debug!("{:?}", &msg);
         let BasicGraphEditorProps {
             user_state,
             callback,
         } = ctx.props();
+        let state = &mut self.state;
         match msg {
             GraphMessage::SelectNode { id, shift_key } => {
-                if !self.selected_nodes.contains(&id) {
+                if !state.selected_nodes.contains(&id) {
                     if !shift_key {
-                        self.selected_nodes.clear();
+                        state.selected_nodes.clear();
                     }
-                    self.selected_nodes.insert(id);
+                    state.selected_nodes.insert(id);
                 }
                 true
             }
             GraphMessage::DeleteNode { id } => {
-                let (_node, _disc_events) = self.graph.borrow_mut().remove_node(id);
+                let (_node, _disc_events) = state.graph.borrow_mut().remove_node(id);
                 true
             }
             GraphMessage::DragStartNode {
@@ -171,9 +122,15 @@ where
                 shift,
                 shift_key,
             } => {
-                if self.selected_nodes.contains(&id) {
-                    self.set_drag_event(ctx.link().callback(|msg| msg));
-                    self.drag_event = Some(DragState::MoveNode {
+                if state.selected_nodes.contains(&id) {
+                    state.set_drag_event::<Self::Message>(
+                        ctx.link().callback(|_| GraphMessage::DragEnd),
+                        ctx.link().callback(|e: web_sys::Event| {
+                            let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
+                            GraphMessage::Dragging(get_offset_from_current_target(e))
+                        }),
+                    );
+                    state.drag_event = Some(DragState::MoveNode {
                         id,
                         shift,
                         is_moved: false,
@@ -183,22 +140,28 @@ where
                 false
             }
             GraphMessage::DragStartPort(id) => {
-                self.set_drag_event(ctx.link().callback(|msg| msg));
-                let pos = self
+                state.set_drag_event::<Self::Message>(
+                    ctx.link().callback(|_| GraphMessage::DragEnd),
+                    ctx.link().callback(|e: web_sys::Event| {
+                        let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
+                        GraphMessage::Dragging(get_offset_from_current_target(e))
+                    }),
+                );
+                let pos = state
                     .port_refs
                     .borrow()
                     .get(id)
-                    .map(get_center)
+                    .and_then(get_center)
                     .unwrap_or_default();
 
                 if let AnyParameterId::Input(input) = id {
-                    if let Some(output) = self.graph.borrow_mut().connections.remove(input) {
-                        self.drag_event = Some(DragState::ConnectPort((output, pos).into()));
+                    if let Some(output) = state.graph.borrow_mut().connections.remove(input) {
+                        state.drag_event = Some(DragState::ConnectPort((output, pos).into()));
                     } else {
-                        self.drag_event = Some(DragState::ConnectPort((input, pos).into()));
+                        state.drag_event = Some(DragState::ConnectPort((input, pos).into()));
                     }
                 } else {
-                    self.drag_event = Some(DragState::ConnectPort((id, pos).into()));
+                    state.drag_event = Some(DragState::ConnectPort((id, pos).into()));
                 }
 
                 false
@@ -207,18 +170,24 @@ where
                 pos,
                 is_shift_key_pressed,
             } => {
-                self.set_drag_event(ctx.link().callback(|msg| msg));
+                state.set_drag_event::<Self::Message>(
+                    ctx.link().callback(|_| GraphMessage::DragEnd),
+                    ctx.link().callback(|e: web_sys::Event| {
+                        let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
+                        GraphMessage::Dragging(get_offset_from_current_target(e))
+                    }),
+                );
                 if !is_shift_key_pressed {
-                    self.selected_nodes.clear();
+                    state.selected_nodes.clear();
                 }
-                self.drag_event = Some(DragState::SelectBox {
+                state.drag_event = Some(DragState::SelectBox {
                     start: pos,
                     end: pos,
                 });
                 true
             }
             GraphMessage::Dragging(mouse_pos) => {
-                match self.drag_event.as_mut() {
+                match state.drag_event.as_mut() {
                     Some(DragState::SelectBox { end, .. }) => {
                         *end = mouse_pos;
                     }
@@ -229,11 +198,11 @@ where
                         ..
                     }) => {
                         let pos = mouse_pos - *shift;
-                        let selected_pos = self.node_positions[*id];
+                        let selected_pos = state.node_positions[*id];
                         let drag_delta = pos - selected_pos;
-                        for id in &self.selected_nodes {
+                        for id in &state.selected_nodes {
                             let id = *id;
-                            self.node_positions[id] += drag_delta;
+                            state.node_positions[id] += drag_delta;
                         }
                         *is_moved = true;
                     }
@@ -255,10 +224,10 @@ where
                 true
             }
             GraphMessage::EnterPort(id) => {
-                if let Some(DragState::ConnectPort(c)) = self.drag_event.as_mut() {
+                if let Some(DragState::ConnectPort(c)) = state.drag_event.as_mut() {
                     let typ_eq = c
                         .pair_with(id)
-                        .map(|(output, input)| self.graph.borrow().param_typ_eq(output, input))
+                        .map(|(output, input)| state.graph.borrow().param_typ_eq(output, input))
                         .unwrap_or_default();
                     if typ_eq {
                         c.to_id(id);
@@ -268,18 +237,19 @@ where
                 true
             }
             GraphMessage::LeavePort(id) => {
-                if let Some(DragState::ConnectPort(c)) = self.drag_event.as_mut() {
+                if let Some(DragState::ConnectPort(c)) = state.drag_event.as_mut() {
                     let typ_eq = c
                         .pair_with(id)
-                        .map(|(output, input)| self.graph.borrow().param_typ_eq(output, input))
+                        .map(|(output, input)| state.graph.borrow().param_typ_eq(output, input))
                         .unwrap_or_default();
                     if typ_eq {
-                        let offset = self.graph_ref.get_offset().unwrap_or_default();
-                        let port_pos = self
+                        let offset = get_offset(&state.graph_ref).unwrap_or_default();
+                        let port_pos = state
                             .port_refs
                             .borrow()
                             .get(id)
-                            .map(|n| get_center(n) - offset)
+                            .and_then(get_center)
+                            .map(|p| p - offset)
                             .unwrap_or_default();
                         c.to_pos(port_pos);
                     }
@@ -287,17 +257,17 @@ where
                 false
             }
             GraphMessage::DragEnd => {
-                self._drag_event_listener = None;
-                self.node_finder.is_showing = false;
-                let mut graph = self.graph.borrow_mut();
-                match self.drag_event.take() {
+                state._drag_event_listener = None;
+                state.node_finder.is_showing = false;
+                let mut graph = state.graph.borrow_mut();
+                match state.drag_event.take() {
                     Some(DragState::SelectBox { start, end }) => {
                         let min = start.min(end);
                         let max = start.max(end);
-                        for id in self.node_positions.iter().flat_map(|(id, pos)| {
+                        for id in state.node_positions.iter().flat_map(|(id, pos)| {
                             (min.cmplt(*pos).all() && pos.cmplt(max).all()).then_some(id)
                         }) {
-                            self.selected_nodes.insert(id);
+                            state.selected_nodes.insert(id);
                         }
                     }
                     Some(DragState::ConnectPort(c)) => {
@@ -316,12 +286,12 @@ where
                     }) => {
                         if !is_moved {
                             if is_shift_key_pressed {
-                                if !self.selected_nodes.remove(&id) {
-                                    self.selected_nodes.insert(id);
+                                if !state.selected_nodes.remove(&id) {
+                                    state.selected_nodes.insert(id);
                                 }
                             } else {
-                                self.selected_nodes.clear();
-                                self.selected_nodes.insert(id);
+                                state.selected_nodes.clear();
+                                state.selected_nodes.insert(id);
                             }
                         }
                     }
@@ -331,23 +301,25 @@ where
                 true
             }
             GraphMessage::CreateNode(template) => {
-                let new_node = self.graph.borrow_mut().add_node(
+                let new_node = state.graph.borrow_mut().add_node(
                     template.node_graph_label(user_state),
                     template.user_data(user_state),
                     |graph, node_id| template.build_node(graph, user_state, node_id),
                 );
-                self.node_positions.insert(new_node, self.node_finder.pos);
-                self.selected_nodes.insert(new_node);
+                state.node_positions.insert(new_node, state.node_finder.pos);
+                state.selected_nodes.insert(new_node);
 
-                let node = &self.graph.borrow()[new_node];
+                let node = &state.graph.borrow()[new_node];
                 for input in node.input_ids() {
-                    self.port_refs
+                    state
+                        .port_refs
                         .borrow_mut()
                         .input
                         .insert(input, Default::default());
                 }
                 for output in node.output_ids() {
-                    self.port_refs
+                    state
+                        .port_refs
                         .borrow_mut()
                         .output
                         .insert(output, Default::default());
@@ -355,8 +327,8 @@ where
                 true
             }
             GraphMessage::OpenNodeFinder(pos) => {
-                self.node_finder.is_showing = true;
-                self.node_finder.pos = pos;
+                state.node_finder.is_showing = true;
+                state.node_finder.pos = pos;
                 true
             }
             GraphMessage::User(res) => {
@@ -370,7 +342,8 @@ where
     fn view(&self, ctx: &Context<Self>) -> Html {
         use GraphMessage::*;
         let BasicGraphEditorProps { user_state, .. } = ctx.props();
-        let graph = self.graph.borrow();
+        let state = &self.state;
+        let graph = state.graph.borrow();
         let nodes = graph.nodes.keys().map(|id| {
             let user_state = user_state.to_owned();
             let node_event = ctx.link().callback(move |e| match e {
@@ -389,12 +362,12 @@ where
             html! {<Node<NodeData, DataType, ValueType, UserState, UserResponse>
                 key={id.to_string()}
                 data={graph[id].clone()}
-                pos={self.node_positions[id]}
-                is_selected={self.selected_nodes.contains(&id)}
+                pos={state.node_positions[id]}
+                is_selected={state.selected_nodes.contains(&id)}
                 onevent={node_event}
                 user_state={user_state}
-                graph={self.graph.clone()}
-                ports_ref={self.port_refs.clone()}
+                graph={state.graph.clone()}
+                ports_ref={state.port_refs.clone()}
             />}
         });
 
@@ -411,9 +384,9 @@ where
             _ => None,
         });
 
-        let edges_and_drag = self.graph_ref.get_offset().map(|offset|{
-            let port_refs = self.port_refs.borrow();
-            let drag = match &self.drag_event {
+        let edges_and_drag =get_offset(&state.graph_ref).map(|offset|{
+            let port_refs = state.port_refs.borrow();
+            let drag = match &state.drag_event {
                 Some(DragState::ConnectPort(c)) => {
                     let connection_in_progress = match c {
                         ConnectionInProgress::FromInput {
@@ -423,14 +396,14 @@ where
                             to.map_pos(|id| {
                                 port_refs
                                     .output
-                                    .get(*id)
-                                    .map(|n| get_center(n) - offset)
+                                    .get(*id)                            .and_then(get_center)
+                                    .map(|p| p - offset)
                                     .unwrap_or_default()
                             }),
                             port_refs
                                 .input
-                                .get(*from)
-                                .map(|n| get_center(n) - offset)
+                                .get(*from)                            .and_then(get_center)
+                                .map(|p| p - offset)
                                 .unwrap_or_default(),
                             graph.inputs[*from].typ.clone(),
                         )),
@@ -441,13 +414,15 @@ where
                             port_refs
                                 .output
                                 .get(*from)
-                                .map(|n| get_center(n) - offset)
+                                .and_then(get_center)
+                                .map(|p| p - offset)
                                 .unwrap_or_default(),
                             to.map_pos(|id| {
                                 port_refs
                                     .input
                                     .get(*id)
-                                    .map(|n| get_center(n) - offset)
+                                    .and_then(get_center)
+                                    .map(|p| p - offset)
                                     .unwrap_or_default()
                             }),
                             graph.outputs[*from].typ.clone(),
@@ -468,22 +443,24 @@ where
                 }
                 _ => Option::None,
             };
-            let graph = self.graph.borrow();
+            let graph = state.graph.borrow();
             let edges = graph.connections.iter().map(|(input, output)| {
-                let typ = self.graph.borrow().inputs[input].typ.clone();
-                let output_pos = self
+                let typ = state.graph.borrow().inputs[input].typ.clone();
+                let output_pos =state
                     .port_refs.borrow()
                     .output
                     .get(*output)
-                    .map(get_center)
+                    .and_then(get_center)
+                    .map(|p| p - offset)
                     .unwrap_or_default();
-                let input_pos = self
+                let input_pos =state
                     .port_refs.borrow()
                     .input
                     .get(input)
-                    .map(get_center)
+                    .and_then(get_center)
+                    .map(|p| p - offset)
                     .unwrap_or_default();
-                html! {<Edge<DataType> key={input.to_string()} output={output_pos-offset} input={input_pos-offset} {typ} />}
+                html! {<Edge<DataType> key={input.to_string()} output={output_pos} input={input_pos} {typ} />}
             });
 
             html! {
@@ -496,61 +473,19 @@ where
 
         html! {
             <GraphArea
-                node_ref={self.graph_ref.clone()}
+                node_ref={state.graph_ref.clone()}
                 onevent={background_event}
             >
             {for nodes}
             {edges_and_drag}
             <BasicNodeFinder<NodeTemplate, UserState>
-                is_showing={self.node_finder.is_showing}
-                pos={self.node_finder.pos}
+                is_showing={state.node_finder.is_showing}
+                pos={state.node_finder.pos}
                 user_state={user_state.to_owned()}
                 onevent={ctx.link().callback(|t| CreateNode(t))}
             />
             </GraphArea>
         }
-    }
-}
-
-impl<NodeData, DataType, ValueType, NodeTemplate, UserState, UserResponse>
-    BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate>
-where
-    NodeData: NodeDataTrait<
-        DataType = DataType,
-        ValueType = ValueType,
-        UserState = UserState,
-        Response = UserResponse,
-    >,
-    NodeTemplate: NodeTemplateTrait<
-            NodeData = NodeData,
-            DataType = DataType,
-            ValueType = ValueType,
-            UserState = UserState,
-        > + NodeTemplateIter<Item = NodeTemplate>
-        + 'static,
-    ValueType:
-        WidgetValueTrait<UserState = UserState, NodeData = NodeData, Response = UserResponse>,
-    UserResponse: 'static,
-{
-    pub fn set_drag_event(&mut self, onevent: Callback<GraphMessage<NodeTemplate, UserResponse>>) {
-        let document = window().document().unwrap();
-
-        self._drag_event_listener = Some([
-            EventListener::new(&document, "mouseup", {
-                let onevent = onevent.clone();
-                move |_| onevent.emit(GraphMessage::DragEnd)
-            }),
-            EventListener::new(
-                &self.graph_ref.cast::<web_sys::Element>().unwrap_throw(),
-                "mousemove",
-                {
-                    move |e| {
-                        let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
-                        onevent.emit(GraphMessage::Dragging(get_offset_from_current_target(e)))
-                    }
-                },
-            ),
-        ]);
     }
 }
 
@@ -595,21 +530,5 @@ where
                 {for buttons}
             </ul>
         </ContextMenu>
-    }
-}
-
-impl GraphRef {
-    pub fn get_offset(&self) -> Option<Vec2> {
-        self.0.cast::<web_sys::Element>().map(|e| {
-            let rect = e.get_bounding_client_rect();
-            vec2(rect.x() as f32, rect.y() as f32)
-        })
-    }
-}
-
-impl Deref for GraphRef {
-    type Target = NodeRef;
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }

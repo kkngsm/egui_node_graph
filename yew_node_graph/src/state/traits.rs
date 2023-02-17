@@ -1,5 +1,3 @@
-
-
 use yew::{Callback, Html};
 
 use super::*;

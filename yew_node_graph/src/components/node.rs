@@ -39,7 +39,7 @@ where
             && self.pos == other.pos
             && self.is_selected == other.is_selected
             && self.onevent == other.onevent
-            && self.user_state == self.user_state
+            && self.user_state == other.user_state
         // The following always return True, because RefCell is used.
         // && Rc::ptr_eq(&self.ports_ref, &other.ports_ref)
         // && Rc::ptr_eq(&self.graph, &other.graph)
