@@ -13,7 +13,7 @@ use crate::components::port::PortEvent;
 use crate::components::select_box::SelectBox;
 use crate::state::{
     AnyParameterId, ConnectTo, ConnectionInProgress, DragState, Graph, NodeDataTrait, NodeFinder,
-    NodeId, NodeTemplateIter, NodeTemplateTrait, PortRefs, WidgetValueTrait,
+    NodeId, NodeTemplateIter, NodeTemplateTrait, PortRefs, UserResponseTrait, WidgetValueTrait,
 };
 use crate::utils::{get_center, get_offset_from_current_target};
 use crate::Vec2;
@@ -33,13 +33,11 @@ pub struct GraphRef(NodeRef);
 /// - UserState must implement PartialEq
 /// If you want a broader implementation, you may want to define your own components
 #[derive(Default)]
-pub struct BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate, UserState>
+pub struct BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate>
 where
     NodeData: 'static,
     DataType: 'static,
     ValueType: 'static,
-    NodeTemplate: 'static,
-    UserState: 'static,
 {
     graph: Rc<RefCell<Graph<NodeData, DataType, ValueType>>>,
     //TODO
@@ -65,11 +63,10 @@ where
     drag_event: Option<DragState>,
     _drag_event_listener: Option<[EventListener; 2]>,
 
-    _user_state: PhantomData<fn() -> UserState>,
     _template: PhantomData<fn() -> NodeTemplate>,
 }
 #[derive(Debug, Clone)]
-pub enum GraphMessage<NodeTemplate> {
+pub enum GraphMessage<NodeTemplate, UserResponse> {
     SelectNode {
         id: NodeId,
         shift_key: bool,
@@ -98,20 +95,27 @@ pub enum GraphMessage<NodeTemplate> {
     OpenNodeFinder(Vec2),
     CreateNode(NodeTemplate),
 
+    User(UserResponse),
     None,
 }
 
 /// Props for [`BasicGraphEditor`]
 #[derive(Properties, PartialEq)]
-pub struct BasicGraphEditorProps<UserState: PartialEq> {
-    pub user_state: Rc<RefCell<UserState>>,
+pub struct BasicGraphEditorProps<UserState: PartialEq, UserResponse: PartialEq> {
+    pub user_state: UserState,
+    pub callback: Callback<UserResponse>,
 }
 
-impl<NodeData, DataType, ValueType, NodeTemplate, UserState> Component
-    for BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate, UserState>
+impl<NodeData, DataType, ValueType, NodeTemplate, UserState, UserResponse> Component
+    for BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate>
 where
-    NodeData: NodeDataTrait<DataType = DataType, ValueType = ValueType, UserState = UserState>,
-    UserState: PartialEq,
+    NodeData: NodeDataTrait<
+        DataType = DataType,
+        ValueType = ValueType,
+        UserState = UserState,
+        Response = UserResponse,
+    >,
+    UserState: Clone + PartialEq + 'static,
     NodeTemplate: NodeTemplateTrait<
             NodeData = NodeData,
             DataType = DataType,
@@ -120,12 +124,15 @@ where
         > + NodeTemplateIter<Item = NodeTemplate>
         + PartialEq
         + Copy
-        + Debug,
+        + Debug
+        + 'static,
     DataType: Display + PartialEq + Clone,
-    ValueType: WidgetValueTrait<UserState = UserState, NodeData = NodeData> + Clone,
+    ValueType: WidgetValueTrait<UserState = UserState, NodeData = NodeData, Response = UserResponse>
+        + Clone,
+    UserResponse: UserResponseTrait + 'static,
 {
-    type Message = GraphMessage<NodeTemplate>;
-    type Properties = BasicGraphEditorProps<UserState>;
+    type Message = GraphMessage<NodeTemplate, UserResponse>;
+    type Properties = BasicGraphEditorProps<UserState, UserResponse>;
     fn create(_ctx: &Context<Self>) -> Self {
         Self {
             graph: Default::default(),
@@ -136,14 +143,15 @@ where
             graph_ref: Default::default(),
             drag_event: Default::default(),
             _drag_event_listener: Default::default(),
-            _user_state: PhantomData,
             _template: PhantomData,
         }
     }
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         log::debug!("{:?}", &msg);
-        let BasicGraphEditorProps { user_state } = ctx.props();
-        let user_state = &mut *user_state.borrow_mut();
+        let BasicGraphEditorProps {
+            user_state,
+            callback,
+        } = ctx.props();
         match msg {
             GraphMessage::SelectNode { id, shift_key } => {
                 if !self.selected_nodes.contains(&id) {
@@ -287,7 +295,7 @@ where
                         let min = start.min(end);
                         let max = start.max(end);
                         for id in self.node_positions.iter().flat_map(|(id, pos)| {
-                            (min.cmplt(*pos).all() && pos.cmplt(max).all()).then(|| id)
+                            (min.cmplt(*pos).all() && pos.cmplt(max).all()).then_some(id)
                         }) {
                             self.selected_nodes.insert(id);
                         }
@@ -351,14 +359,20 @@ where
                 self.node_finder.pos = pos;
                 true
             }
+            GraphMessage::User(res) => {
+                let rerender = res.should_rerender();
+                callback.emit(res);
+                rerender
+            }
             GraphMessage::None => false,
         }
     }
     fn view(&self, ctx: &Context<Self>) -> Html {
         use GraphMessage::*;
-        let BasicGraphEditorProps { user_state } = ctx.props();
+        let BasicGraphEditorProps { user_state, .. } = ctx.props();
         let graph = self.graph.borrow();
         let nodes = graph.nodes.keys().map(|id| {
+            let user_state = user_state.to_owned();
             let node_event = ctx.link().callback(move |e| match e {
                 NodeEvent::Select { shift_key } => SelectNode { id, shift_key },
                 NodeEvent::Delete => DeleteNode { id },
@@ -370,14 +384,15 @@ where
                 NodeEvent::Port(PortEvent::MouseDown(id)) => DragStartPort(id),
                 NodeEvent::Port(PortEvent::MouseEnter(id)) => EnterPort(id),
                 NodeEvent::Port(PortEvent::MouseLeave(id)) => LeavePort(id),
+                NodeEvent::User(res) => User(res),
             });
-            html! {<Node<NodeData, DataType, ValueType, UserState>
+            html! {<Node<NodeData, DataType, ValueType, UserState, UserResponse>
                 key={id.to_string()}
                 data={graph[id].clone()}
                 pos={self.node_positions[id]}
                 is_selected={self.selected_nodes.contains(&id)}
                 onevent={node_event}
-                {user_state}
+                user_state={user_state}
                 graph={self.graph.clone()}
                 ports_ref={self.port_refs.clone()}
             />}
@@ -489,7 +504,7 @@ where
             <BasicNodeFinder<NodeTemplate, UserState>
                 is_showing={self.node_finder.is_showing}
                 pos={self.node_finder.pos}
-                user_state={user_state.clone()}
+                user_state={user_state.to_owned()}
                 onevent={ctx.link().callback(|t| CreateNode(t))}
             />
             </GraphArea>
@@ -497,10 +512,27 @@ where
     }
 }
 
-impl<NodeData, DataType, ValueType, NodeTemplate, UserState>
-    BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate, UserState>
+impl<NodeData, DataType, ValueType, NodeTemplate, UserState, UserResponse>
+    BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate>
+where
+    NodeData: NodeDataTrait<
+        DataType = DataType,
+        ValueType = ValueType,
+        UserState = UserState,
+        Response = UserResponse,
+    >,
+    NodeTemplate: NodeTemplateTrait<
+            NodeData = NodeData,
+            DataType = DataType,
+            ValueType = ValueType,
+            UserState = UserState,
+        > + NodeTemplateIter<Item = NodeTemplate>
+        + 'static,
+    ValueType:
+        WidgetValueTrait<UserState = UserState, NodeData = NodeData, Response = UserResponse>,
+    UserResponse: 'static,
 {
-    pub fn set_drag_event(&mut self, onevent: Callback<GraphMessage<NodeTemplate>>) {
+    pub fn set_drag_event(&mut self, onevent: Callback<GraphMessage<NodeTemplate, UserResponse>>) {
         let document = window().document().unwrap();
 
         self._drag_event_listener = Some([
@@ -530,7 +562,7 @@ where
 {
     pub is_showing: bool,
     pub pos: Vec2,
-    pub user_state: Rc<RefCell<UserState>>,
+    pub user_state: UserState,
     pub onevent: Callback<NodeTemplate>,
 }
 
@@ -551,8 +583,6 @@ where
         + 'static,
     UserState: PartialEq,
 {
-    let user_state = &mut *user_state.borrow_mut();
-
     let buttons = NodeTemplate::all_kinds().into_iter().map(|t| {
         let onevent = onevent.clone();
         html! {

@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::Rc};
 
-use yew::Html;
+
+use yew::{Callback, Html};
 
 use super::*;
 
@@ -14,8 +14,7 @@ use super::*;
 /// used, so the implementation is not important, but it should be reasonably
 /// cheap to construct.
 pub trait WidgetValueTrait {
-    // TODO
-    // type Response;
+    type Response;
     type UserState;
     type NodeData;
 
@@ -27,8 +26,9 @@ pub trait WidgetValueTrait {
         &self,
         param_name: &str,
         node_id: NodeId,
-        user_state: Rc<RefCell<Self::UserState>>,
+        user_state: &Self::UserState,
         node_data: &Self::NodeData,
+        callback: Callback<Self::Response>,
     ) -> Html;
 }
 
@@ -73,8 +73,8 @@ pub trait NodeDataTrait
 where
     Self: Sized,
 {
-    // /// Must be set to the custom user `NodeResponse` type
-    // type Response;
+    /// Must be set to the custom user `NodeResponse` type
+    type Response;
     /// Must be set to the custom user `UserState` type
     type UserState;
     /// Must be set to the custom user `DataType` type
@@ -87,7 +87,8 @@ where
         &self,
         node_id: NodeId,
         graph: &Graph<Self, Self::DataType, Self::ValueType>,
-        user_state: Rc<RefCell<Self::UserState>>,
+        user_state: &Self::UserState,
+        callback: Callback<Self::Response>,
     ) -> Html;
 }
 
@@ -118,13 +119,13 @@ pub trait NodeTemplateTrait: Clone {
     /// The return type is Cow<str> to allow returning owned or borrowed values
     /// more flexibly. Refer to the documentation for `DataTypeTrait::name` for
     /// more information
-    fn node_finder_label(&self, user_state: &mut Self::UserState) -> std::borrow::Cow<str>;
+    fn node_finder_label(&self, user_state: &Self::UserState) -> std::borrow::Cow<str>;
 
     /// Returns a descriptive name for the node kind, used in the graph.
-    fn node_graph_label(&self, user_state: &mut Self::UserState) -> String;
+    fn node_graph_label(&self, user_state: &Self::UserState) -> String;
 
     /// Returns the user data for this node kind.
-    fn user_data(&self, user_state: &mut Self::UserState) -> Self::NodeData;
+    fn user_data(&self, user_state: &Self::UserState) -> Self::NodeData;
 
     /// This function is run when this node kind gets added to the graph. The
     /// node will be empty by default, and this function can be used to fill its
@@ -132,11 +133,13 @@ pub trait NodeTemplateTrait: Clone {
     fn build_node(
         &self,
         graph: &mut Graph<Self::NodeData, Self::DataType, Self::ValueType>,
-        user_state: &mut Self::UserState,
+        user_state: &Self::UserState,
         node_id: NodeId,
     );
 }
 
-// /// The custom user response types when drawing nodes in the graph must
-// /// implement this trait.
-// pub trait UserResponseTrait: Clone + std::fmt::Debug {}
+/// The custom user response types when drawing nodes in the graph must
+/// implement this trait.
+pub trait UserResponseTrait: Clone + std::fmt::Debug + PartialEq {
+    fn should_rerender(&self) -> bool;
+}

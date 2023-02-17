@@ -1,12 +1,12 @@
 use std::{borrow::Cow, cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use web_sys::{HtmlInputElement, InputEvent};
-use yew::{function_component, html, Html};
+use yew::{function_component, html, use_mut_ref, use_state_eq, Html};
 use yew_node_graph::{
     components::basic::BasicGraphEditor,
     state::{
         DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId, NodeTemplateIter,
-        NodeTemplateTrait, WidgetValueTrait,
+        NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
     },
     *,
 };
@@ -123,9 +123,9 @@ impl NodeTemplateTrait for MyNodeTemplate {
     type NodeData = MyNodeData;
     type DataType = MyDataType;
     type ValueType = MyValueType;
-    type UserState = MyGraphState;
+    type UserState = Rc<RefCell<MyGraphState>>;
 
-    fn node_finder_label(&self, _user_state: &mut Self::UserState) -> std::borrow::Cow<str> {
+    fn node_finder_label(&self, _user_state: &Self::UserState) -> std::borrow::Cow<str> {
         Cow::Borrowed(match self {
             MyNodeTemplate::MakeVector => "New vector",
             MyNodeTemplate::MakeScalar => "New scalar",
@@ -137,18 +137,18 @@ impl NodeTemplateTrait for MyNodeTemplate {
         })
     }
 
-    fn node_graph_label(&self, user_state: &mut Self::UserState) -> String {
+    fn node_graph_label(&self, user_state: &Self::UserState) -> String {
         self.node_finder_label(user_state).into()
     }
 
-    fn user_data(&self, _user_state: &mut Self::UserState) -> Self::NodeData {
+    fn user_data(&self, _user_state: &Self::UserState) -> Self::NodeData {
         MyNodeData { template: *self }
     }
 
     fn build_node(
         &self,
         graph: &mut Graph<Self::NodeData, Self::DataType, Self::ValueType>,
-        _user_state: &mut Self::UserState,
+        _user_state: &Self::UserState,
         node_id: NodeId,
     ) {
         // The nodes are created empty by default. This function needs to take
@@ -265,15 +265,16 @@ impl NodeTemplateIter for MyNodeTemplate {
 }
 
 impl WidgetValueTrait for MyValueType {
-    // type Response = MyResponse;
-    type UserState = MyGraphState;
+    type Response = MyResponse;
+    type UserState = Rc<RefCell<MyGraphState>>;
     type NodeData = MyNodeData;
     fn value_widget(
         &self,
         param_name: &str,
         _node_id: NodeId,
-        _user_state: Rc<RefCell<Self::UserState>>,
+        _user_state: &Self::UserState,
         _node_data: &Self::NodeData,
+        _callback: yew::Callback<Self::Response>,
     ) -> Html {
         fn get_value(e: InputEvent) -> f32 {
             let event_target = e.target().unwrap();
@@ -330,12 +331,18 @@ impl WidgetValueTrait for MyValueType {
     }
 }
 
-// impl UserResponseTrait for MyResponse {}
+impl UserResponseTrait for MyResponse {
+    fn should_rerender(&self) -> bool {
+        match self {
+            MyResponse::SetActiveNode(_) | MyResponse::ClearActiveNode => true,
+        }
+    }
+}
 impl NodeDataTrait for MyNodeData {
-    type UserState = MyGraphState;
+    type UserState = Rc<RefCell<MyGraphState>>;
     type DataType = MyDataType;
     type ValueType = MyValueType;
-    // type Response = MyResponse;
+    type Response = MyResponse;
 
     // type Response = MyResponse;
     // This method will be called when drawing each node. This allows adding
@@ -346,8 +353,9 @@ impl NodeDataTrait for MyNodeData {
     fn bottom_ui(
         &self,
         node_id: NodeId,
-        _graph: &Graph<MyNodeData, MyDataType, MyValueType>,
-        user_state: Rc<RefCell<Self::UserState>>,
+        _graph: &Graph<Self, Self::DataType, Self::ValueType>,
+        user_state: &Self::UserState,
+        callback: yew::Callback<Self::Response>,
     ) -> Html {
         // This logic is entirely up to the user. In this case, we check if the
         // current node we're drawing is the active one, by comparing against
@@ -367,14 +375,20 @@ impl NodeDataTrait for MyNodeData {
             html! {
                 <button onclick={
                     let user_state = user_state.clone();
-                    move |_| user_state.borrow_mut().active_node = None
+                    move |_| {
+                        user_state.borrow_mut().active_node = None;
+                        callback.emit(MyResponse::ClearActiveNode)
+                    }
                 }>{"👁 Active"}</button>
             }
         } else {
             html! {
                 <button onclick={
                     let user_state = user_state.clone();
-                    move |_| user_state.borrow_mut().active_node = Some(node_id)
+                    move |_| {
+                        user_state.borrow_mut().active_node = Some(node_id);
+                        callback.emit(MyResponse::SetActiveNode(node_id))
+                    }
                 }>{"👁 Set active"}</button>
             }
         }
@@ -617,9 +631,30 @@ type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
 
 #[function_component(App)]
 fn app() -> yew::Html {
-    let user_state = std::rc::Rc::new(std::cell::RefCell::new(MyGraphState::default()));
+    let user_state = use_mut_ref(MyGraphState::default);
+    let result = use_state_eq(String::default);
     html! {
-        <div style={"padding:10rem"}><BasicGraphEditor<MyNodeData, MyDataType, MyValueType, MyNodeTemplate, MyGraphState> {user_state}/></div>
+        <>
+        <div style={"padding:5rem"}>
+        <BasicGraphEditor<MyNodeData, MyDataType, MyValueType, MyNodeTemplate>
+            user_state={user_state}
+            callback={{
+                let result = result.clone();
+                move |res|{
+                    match res{
+                        MyResponse::SetActiveNode(id) => {
+                            result.set(id.to_string())
+                        },
+                        MyResponse::ClearActiveNode => {
+                            result.set("".to_string())
+                        },
+                    }
+                }
+            }}
+        />
+        </div>
+        <p>{result.as_str()}</p>
+        </>
     }
 }
 

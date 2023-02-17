@@ -1,6 +1,6 @@
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::{fmt::Display, rc::Rc};
 
-use yew::{function_component, html, Html, Properties};
+use yew::{function_component, html, Callback, Html, Properties};
 
 use crate::state::{InputParam, NodeId, OutputParam, WidgetValueTrait};
 
@@ -11,7 +11,7 @@ pub struct InputWidgetProps<NodeData, DataType, ValueType, UserState> {
     pub node_data: Rc<NodeData>,
     pub node_id: NodeId,
     pub is_connected: bool,
-    pub user_state: Rc<RefCell<UserState>>,
+    pub user_state: UserState,
 }
 
 #[function_component(InputWidget)]
@@ -32,9 +32,13 @@ where
     let widget = if *is_connected {
         html! {name.as_str()}
     } else {
-        param
-            .value
-            .value_widget(name.as_str(), *node_id, user_state.clone(), node_data)
+        param.value.value_widget(
+            name.as_str(),
+            *node_id,
+            user_state,
+            node_data,
+            Callback::from(|_| {}),
+        )
     };
     html! {
         <div
