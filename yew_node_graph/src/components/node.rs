@@ -1,7 +1,9 @@
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::{fmt::Display, rc::Rc};
 
 use crate::{
-    state::{Graph, InputId, NodeDataTrait, NodeId, OutputId, PortRefs, WidgetValueTrait},
+    state::{
+        AnyParameterId, Graph, InputId, NodeDataTrait, NodeId, OutputId, PortRefs, WidgetValueTrait,
+    },
     utils::{get_offset_from_current_target, use_event_listeners},
     Vec2,
 };
@@ -23,10 +25,12 @@ where
     pub pos: Vec2,
     #[prop_or_default]
     pub is_selected: bool,
-    pub onevent: Callback<NodeEvent<UserResponse>>,
+    pub node_callback: Callback<(NodeId, NodeEvent)>,
+    pub port_callback: Callback<(AnyParameterId, PortEvent)>,
+    pub user_callback: Callback<UserResponse>,
 
     pub ports_ref: PortRefs,
-    pub graph: Rc<RefCell<Graph<NodeData, DataType, ValueType>>>,
+    pub graph: Rc<Graph<NodeData, DataType, ValueType>>,
     pub user_state: UserState,
 }
 impl<NodeData, DataType, ValueType, UserState, UserResponse> PartialEq
@@ -38,11 +42,13 @@ where
         Rc::ptr_eq(&self.data, &other.data)
             && self.pos == other.pos
             && self.is_selected == other.is_selected
-            && self.onevent == other.onevent
+            && self.node_callback == other.node_callback
+            && self.port_callback == other.port_callback
+            && self.user_callback == other.user_callback
             && self.user_state == other.user_state
+            && Rc::ptr_eq(&self.graph, &other.graph)
         // The following always return True, because RefCell is used.
         // && Rc::ptr_eq(&self.ports_ref, &other.ports_ref)
-        // && Rc::ptr_eq(&self.graph, &other.graph)
     }
 }
 
@@ -59,10 +65,12 @@ where
 pub fn node<NodeData, DataType, ValueType, UserState, UserResponse>(
     NodeProps {
         data,
-        onevent,
         pos,
         is_selected,
         user_state,
+        node_callback,
+        port_callback,
+        user_callback,
         graph,
         ports_ref,
     }: &NodeProps<NodeData, DataType, ValueType, UserState, UserResponse>,
@@ -80,10 +88,10 @@ where
     UserState: Clone + PartialEq + 'static,
     UserResponse: 'static,
 {
-    let graph = &*graph.borrow();
+    let id = data.id;
     let port_event = Callback::from({
-        let onevent = onevent.clone();
-        move |e| onevent.emit(NodeEvent::Port(e))
+        let port_callback = port_callback.clone();
+        move |p| port_callback.emit(p)
     });
     let input_ports = input_ports(
         &data.inputs,
@@ -103,41 +111,30 @@ user-select:none;
     let node_ref = use_node_ref();
     use_event_listeners(
         node_ref.clone(),
-        [
-            (
-                "click",
-                Box::new({
-                    let onevent = onevent.clone();
-                    move |e| {
-                        e.stop_propagation();
-                        onevent.emit(NodeEvent::Select {
-                            shift_key: e.shift_key(),
-                        })
-                    }
-                }),
-            ),
-            (
-                "mousedown",
-                Box::new({
-                    let onevent = onevent.clone();
-                    move |e| {
-                        e.stop_propagation();
-                        onevent.emit(NodeEvent::DragStart {
+        [(
+            "mousedown",
+            Box::new({
+                let node_callback = node_callback.clone();
+                move |e| {
+                    e.stop_propagation();
+                    node_callback.emit((
+                        id,
+                        NodeEvent::MouseDown {
                             shift: get_offset_from_current_target(&e),
                             shift_key: e.shift_key(),
-                        })
-                    }
-                }),
-            ),
-        ],
+                        },
+                    ))
+                }
+            }),
+        )],
     );
     let bottom_ui = data.user_data.bottom_ui(
         data.id,
         graph,
         user_state,
         Callback::from({
-            let onevent = onevent.clone();
-            move |user_response| onevent.emit(NodeEvent::User(user_response))
+            let user_callback = user_callback.clone();
+            move |user_response| user_callback.emit(user_response)
         }),
     );
     html! {
@@ -153,10 +150,10 @@ user-select:none;
             <div class={"node-title"}>{&data.label}
             <button class={"node-delete"}
                 onclick={
-                {let onevent = onevent.clone();
-                move  |e: MouseEvent|{
+                {let node_callback = node_callback.clone();
+                move |e: MouseEvent|{
                     e.stop_propagation();
-                    onevent.emit(NodeEvent::Delete)
+                    node_callback.emit((id, NodeEvent::Delete))
                 }}}
             >{"x"}</button>
             </div>
@@ -168,12 +165,9 @@ user-select:none;
 }
 
 #[derive(Debug, Clone)]
-pub enum NodeEvent<UserResponse> {
-    DragStart { shift: Vec2, shift_key: bool },
-    Select { shift_key: bool },
+pub enum NodeEvent {
+    MouseDown { shift: Vec2, shift_key: bool },
     Delete,
-    Port(PortEvent),
-    User(UserResponse),
 }
 
 #[derive(Debug, Clone)]
@@ -187,7 +181,7 @@ pub fn input_ports<NodeData, DataType, ValueType, UserState>(
     ports: &[(Rc<String>, InputId)],
     node_id: NodeId,
     node_data: &Rc<NodeData>,
-    onevent: Callback<PortEvent>,
+    onevent: Callback<(AnyParameterId, PortEvent)>,
     graph: &Graph<NodeData, DataType, ValueType>,
     ports_ref: &PortRefs,
     user_state: &UserState,
@@ -234,7 +228,7 @@ where
 }
 pub fn output_ports<NodeData, DataType, ValueType>(
     ports: &[(Rc<String>, OutputId)],
-    onevent: Callback<PortEvent>,
+    onevent: Callback<(AnyParameterId, PortEvent)>,
     graph: &Graph<NodeData, DataType, ValueType>,
     ports_ref: &PortRefs,
 ) -> Html

@@ -1,4 +1,6 @@
-use std::fmt::{Debug, Display};
+use std::cell::RefCell;
+use std::fmt::Display;
+use std::rc::Rc;
 
 use crate::components::contextmenu::ContextMenu;
 use crate::components::edge::Edge;
@@ -8,444 +10,304 @@ use crate::components::port::PortEvent;
 use crate::components::select_box::SelectBox;
 use crate::state::basic::BasicGraphEditorState;
 use crate::state::{
-    AnyParameterId, ConnectTo, ConnectionInProgress, DragState, NodeDataTrait, NodeId,
-    NodeTemplateIter, NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
+    AnyParameterId, DragState, InputId, NodeDataTrait, NodeId, NodeTemplateIter, NodeTemplateTrait,
+    OutputId, UserResponseTrait, WidgetValueTrait,
 };
 use crate::utils::{get_center, get_offset, get_offset_from_current_target};
 use crate::Vec2;
 
+use gloo_events::EventListener;
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use yew::prelude::*;
 
-pub struct BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate> {
-    state: BasicGraphEditorState<NodeData, DataType, ValueType, NodeTemplate>,
-}
-#[derive(Debug, Clone)]
-pub enum GraphMessage<NodeTemplate, UserResponse> {
-    SelectNode {
-        id: NodeId,
-        shift_key: bool,
-    },
-    DeleteNode {
-        id: NodeId,
-    },
-
-    DragStartPort(AnyParameterId),
-    DragStartNode {
-        id: NodeId,
-        shift: Vec2,
-        shift_key: bool,
-    },
-    DragStartBackground {
-        pos: Vec2,
-        is_shift_key_pressed: bool,
-    },
-
-    Dragging(Vec2),
-    EnterPort(AnyParameterId),
-    LeavePort(AnyParameterId),
-    DragEnd,
-
-    // NodeFinder Event
-    OpenNodeFinder(Vec2),
-    CreateNode(NodeTemplate),
-
-    User(UserResponse),
-    None,
-}
-
 /// Props for [`BasicGraphEditor`]
-#[derive(Properties, PartialEq)]
-pub struct BasicGraphEditorProps<UserState: PartialEq, UserResponse: PartialEq> {
+#[derive(Properties)]
+pub struct BasicGraphEditorProps<
+    NodeData,
+    DataType,
+    ValueType,
+    NodeTemplate,
+    UserState,
+    UserResponse,
+> where
+    UserState: PartialEq,
+{
     pub user_state: UserState,
-    pub callback: Callback<UserResponse>,
+    pub graph_editor_state:
+        Rc<RefCell<BasicGraphEditorState<NodeData, DataType, ValueType, NodeTemplate>>>,
+    #[prop_or_default]
+    pub callback: Callback<BasicGraphEditorResponse<NodeData, UserResponse>>,
+}
+impl<NodeData, DataType, ValueType, NodeTemplate, UserState, UserResponse> PartialEq
+    for BasicGraphEditorProps<NodeData, DataType, ValueType, NodeTemplate, UserState, UserResponse>
+where
+    UserState: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.user_state == other.user_state
+            && Rc::ptr_eq(&self.graph_editor_state, &other.graph_editor_state)
+            && self.callback == other.callback
+    }
 }
 
-impl<NodeData, DataType, ValueType, NodeTemplate, UserState, UserResponse> Component
-    for BasicGraphEditor<NodeData, DataType, ValueType, NodeTemplate>
+#[function_component(BasicGraphEditor)]
+pub fn basic_graph_editor<NodeData, DataType, ValueType, NodeTemplate, UserState, UserResponse>(
+    BasicGraphEditorProps {
+        user_state,
+        graph_editor_state,
+        callback,
+    }: &BasicGraphEditorProps<
+        NodeData,
+        DataType,
+        ValueType,
+        NodeTemplate,
+        UserState,
+        UserResponse,
+    >,
+) -> Html
 where
-    NodeData: 'static
-        + NodeDataTrait<
+    NodeData: NodeDataTrait<
             DataType = DataType,
             ValueType = ValueType,
             UserState = UserState,
             Response = UserResponse,
-        >,
-    UserState: 'static + Clone + PartialEq,
-    NodeTemplate: 'static
+        > + Clone
+        + 'static,
+    DataType: Display + PartialEq + Clone + 'static,
+    ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState, Response = UserResponse>
+        + Clone
+        + 'static,
+    UserState: Clone + PartialEq + 'static,
+    UserResponse: UserResponseTrait + 'static,
+    NodeTemplate: Copy
+        + NodeTemplateIter<Item = NodeTemplate>
         + NodeTemplateTrait<
             NodeData = NodeData,
             DataType = DataType,
             ValueType = ValueType,
             UserState = UserState,
-        >
-        + NodeTemplateIter<Item = NodeTemplate>
-        + PartialEq
-        + Copy
-        + Debug,
-    DataType: 'static + Display + PartialEq + Clone,
-    ValueType: 'static
-        + WidgetValueTrait<UserState = UserState, NodeData = NodeData, Response = UserResponse>
-        + Clone,
-    UserResponse: 'static + UserResponseTrait,
+        > + PartialEq
+        + Clone
+        + 'static,
 {
-    type Message = GraphMessage<NodeTemplate, UserResponse>;
-    type Properties = BasicGraphEditorProps<UserState, UserResponse>;
-    fn create(_ctx: &Context<Self>) -> Self {
-        Self {
-            state: Default::default(),
-        }
-    }
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
-        // log::debug!("{:?}", &msg);
-        let BasicGraphEditorProps {
-            user_state,
-            callback,
-        } = ctx.props();
-        let state = &mut self.state;
-        match msg {
-            GraphMessage::SelectNode { id, shift_key } => {
-                if !state.selected_nodes.contains(&id) {
-                    if !shift_key {
-                        state.selected_nodes.clear();
-                    }
-                    state.selected_nodes.insert(id);
+    let event_listener = use_mut_ref(|| Option::<[gloo_events::EventListener; 2]>::None);
+    let updater = use_force_update();
+
+    let node_callback = Callback::from({
+        let _callback = callback.clone();
+        let state = graph_editor_state.clone();
+        let event_listener = event_listener.clone();
+        let updater = updater.clone();
+        move |(id, n)| match n {
+            NodeEvent::Delete => {
+                state.borrow_mut().delete_node(id);
+                updater.force_update();
+            }
+            NodeEvent::MouseDown { shift, shift_key } => {
+                {
+                    let mut state = state.borrow_mut();
+                    state.selection(id, shift_key);
+                    state.start_moving_node(id, shift, shift_key);
                 }
-                true
-            }
-            GraphMessage::DeleteNode { id } => {
-                let (_node, _disc_events) = state.graph.borrow_mut().remove_node(id);
-                true
-            }
-            GraphMessage::DragStartNode {
-                id,
-                shift,
-                shift_key,
-            } => {
-                if state.selected_nodes.contains(&id) {
-                    state.set_drag_event::<Self::Message>(
-                        ctx.link().callback(|_| GraphMessage::DragEnd),
-                        ctx.link().callback(|e: web_sys::Event| {
+                updater.force_update();
+                *event_listener.borrow_mut() = set_drag_event(
+                    &state.borrow().graph_ref,
+                    {
+                        let updater = updater.clone();
+                        let state = state.clone();
+                        move |e| {
                             let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
-                            GraphMessage::Dragging(get_offset_from_current_target(e))
-                        }),
-                    );
-                    state.drag_event = Some(DragState::MoveNode {
-                        id,
-                        shift,
-                        is_moved: false,
-                        is_shift_key_pressed: shift_key,
-                    });
-                }
-                false
-            }
-            GraphMessage::DragStartPort(id) => {
-                state.set_drag_event::<Self::Message>(
-                    ctx.link().callback(|_| GraphMessage::DragEnd),
-                    ctx.link().callback(|e: web_sys::Event| {
-                        let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
-                        GraphMessage::Dragging(get_offset_from_current_target(e))
-                    }),
+                            let mouse_pos = get_offset_from_current_target(e);
+                            state.borrow_mut().move_node(mouse_pos);
+                            updater.force_update();
+                        }
+                    },
+                    {
+                        let updater = updater.clone();
+                        let state = state.clone();
+                        move |_| {
+                            state.borrow_mut().end_moving_node();
+                            updater.force_update();
+                        }
+                    },
                 );
-                let pos = state
-                    .port_refs
-                    .borrow()
-                    .get(id)
-                    .and_then(get_center)
-                    .unwrap_or_default();
-
-                if let AnyParameterId::Input(input) = id {
-                    if let Some(output) = state.graph.borrow_mut().connections.remove(input) {
-                        state.drag_event = Some(DragState::ConnectPort((output, pos).into()));
-                    } else {
-                        state.drag_event = Some(DragState::ConnectPort((input, pos).into()));
-                    }
-                } else {
-                    state.drag_event = Some(DragState::ConnectPort((id, pos).into()));
-                }
-
-                false
             }
-            GraphMessage::DragStartBackground {
-                pos,
-                is_shift_key_pressed,
-            } => {
-                state.set_drag_event::<Self::Message>(
-                    ctx.link().callback(|_| GraphMessage::DragEnd),
-                    ctx.link().callback(|e: web_sys::Event| {
-                        let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
-                        GraphMessage::Dragging(get_offset_from_current_target(e))
-                    }),
+        }
+    });
+    let port_callback = Callback::from({
+        let _callback = callback.clone();
+        let state = graph_editor_state.clone();
+        let event_listener = event_listener.clone();
+        let updater = updater.clone();
+        move |(id, p)| match p {
+            PortEvent::MouseDown => {
+                state.borrow_mut().start_connection(id);
+                updater.force_update();
+                *event_listener.borrow_mut() = set_drag_event(
+                    &state.borrow().graph_ref,
+                    {
+                        let updater = updater.clone();
+                        let state = state.clone();
+                        move |e| {
+                            let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
+                            let pos = get_offset_from_current_target(e);
+                            state.borrow_mut().move_connection(pos);
+                            updater.force_update();
+                        }
+                    },
+                    {
+                        let state = state.clone();
+                        let updater = updater.clone();
+                        move |_| {
+                            state.borrow_mut().end_connection();
+                            updater.force_update();
+                        }
+                    },
                 );
-                if !is_shift_key_pressed {
-                    state.selected_nodes.clear();
-                }
-                state.drag_event = Some(DragState::SelectBox {
-                    start: pos,
-                    end: pos,
-                });
-                true
             }
-            GraphMessage::Dragging(mouse_pos) => {
-                match state.drag_event.as_mut() {
-                    Some(DragState::SelectBox { end, .. }) => {
-                        *end = mouse_pos;
-                    }
-                    Some(DragState::MoveNode {
-                        id,
-                        shift,
-                        is_moved,
-                        ..
-                    }) => {
-                        let pos = mouse_pos - *shift;
-                        let selected_pos = state.node_positions[*id];
-                        let drag_delta = pos - selected_pos;
-                        for id in &state.selected_nodes {
-                            let id = *id;
-                            state.node_positions[id] += drag_delta;
-                        }
-                        *is_moved = true;
-                    }
-                    Some(DragState::ConnectPort(c)) => {
-                        if let ConnectionInProgress::FromInput {
-                            dest: ConnectTo::Pos(pos),
-                            ..
-                        }
-                        | ConnectionInProgress::FromOutput {
-                            dest: ConnectTo::Pos(pos),
-                            ..
-                        } = c
-                        {
-                            *pos = mouse_pos;
-                        }
-                    }
-                    None => (),
-                }
-                true
-            }
-            GraphMessage::EnterPort(id) => {
-                if let Some(DragState::ConnectPort(c)) = state.drag_event.as_mut() {
+            PortEvent::MouseEnter => {
+                let BasicGraphEditorState {
+                    graph, drag_state, ..
+                } = &mut *state.borrow_mut();
+                if let Some(DragState::ConnectPort(c)) = drag_state.as_mut() {
                     let typ_eq = c
                         .pair_with(id)
-                        .map(|(output, input)| state.graph.borrow().param_typ_eq(output, input))
+                        .map(|(output, input)| graph.param_typ_eq(output, input))
                         .unwrap_or_default();
                     if typ_eq {
                         c.to_id(id);
+                        updater.force_update();
                     }
                 }
-
-                true
             }
-            GraphMessage::LeavePort(id) => {
-                if let Some(DragState::ConnectPort(c)) = state.drag_event.as_mut() {
+            PortEvent::MouseLeave => {
+                let BasicGraphEditorState {
+                    graph,
+                    drag_state,
+                    port_refs,
+                    graph_ref,
+                    ..
+                } = &mut *state.borrow_mut();
+                if let Some(DragState::ConnectPort(c)) = drag_state.as_mut() {
                     let typ_eq = c
                         .pair_with(id)
-                        .map(|(output, input)| state.graph.borrow().param_typ_eq(output, input))
+                        .map(|(output, input)| graph.param_typ_eq(output, input))
                         .unwrap_or_default();
                     if typ_eq {
-                        let offset = get_offset(&state.graph_ref).unwrap_or_default();
-                        let port_pos = state
-                            .port_refs
+                        let offset = get_offset(graph_ref);
+                        let port_pos = port_refs
                             .borrow()
                             .get(id)
                             .and_then(get_center)
-                            .map(|p| p - offset)
+                            .zip(offset)
+                            .map(|(p, o)| p - o)
                             .unwrap_or_default();
                         c.to_pos(port_pos);
+                        updater.force_update();
                     }
                 }
-                false
             }
-            GraphMessage::DragEnd => {
-                state._drag_event_listener = None;
-                state.node_finder.is_showing = false;
-                let mut graph = state.graph.borrow_mut();
-                match state.drag_event.take() {
-                    Some(DragState::SelectBox { start, end }) => {
-                        let min = start.min(end);
-                        let max = start.max(end);
-                        for id in state.node_positions.iter().flat_map(|(id, pos)| {
-                            (min.cmplt(*pos).all() && pos.cmplt(max).all()).then_some(id)
-                        }) {
-                            state.selected_nodes.insert(id);
-                        }
-                    }
-                    Some(DragState::ConnectPort(c)) => {
-                        // Connect to Port
-                        if let Some((&output, &input)) = c.pair() {
-                            if graph.param_typ_eq(output, input) {
-                                graph.connections.insert(input, output);
-                            }
-                        }
-                    }
-                    Some(DragState::MoveNode {
-                        id,
-                        is_moved,
-                        is_shift_key_pressed,
-                        ..
-                    }) => {
-                        if !is_moved {
-                            if is_shift_key_pressed {
-                                if !state.selected_nodes.remove(&id) {
-                                    state.selected_nodes.insert(id);
-                                }
-                            } else {
-                                state.selected_nodes.clear();
-                                state.selected_nodes.insert(id);
-                            }
-                        }
-                    }
-                    _ => (),
-                }
-
-                true
-            }
-            GraphMessage::CreateNode(template) => {
-                let new_node = state.graph.borrow_mut().add_node(
-                    template.node_graph_label(user_state),
-                    template.user_data(user_state),
-                    |graph, node_id| template.build_node(graph, user_state, node_id),
-                );
-                state.node_positions.insert(new_node, state.node_finder.pos);
-                state.selected_nodes.insert(new_node);
-
-                let node = &state.graph.borrow()[new_node];
-                for input in node.input_ids() {
-                    state
-                        .port_refs
-                        .borrow_mut()
-                        .input
-                        .insert(input, Default::default());
-                }
-                for output in node.output_ids() {
-                    state
-                        .port_refs
-                        .borrow_mut()
-                        .output
-                        .insert(output, Default::default());
-                }
-                true
-            }
-            GraphMessage::OpenNodeFinder(pos) => {
+        }
+    });
+    let background_event = Callback::from({
+        let _callback = callback.clone();
+        let state = graph_editor_state.clone();
+        let event_listener = event_listener;
+        let updater = updater.clone();
+        move |b: BackgroundEvent| match b {
+            BackgroundEvent::ContextMenu(pos) => {
+                let mut state = state.borrow_mut();
                 state.node_finder.is_showing = true;
                 state.node_finder.pos = pos;
-                true
+                updater.force_update();
             }
-            GraphMessage::User(res) => {
-                let rerender = res.should_rerender();
-                callback.emit(res);
-                rerender
-            }
-            GraphMessage::None => false,
-        }
-    }
-    fn view(&self, ctx: &Context<Self>) -> Html {
-        use GraphMessage::*;
-        let BasicGraphEditorProps { user_state, .. } = ctx.props();
-        let state = &self.state;
-        let graph = state.graph.borrow();
-        let nodes = graph.nodes.keys().map(|id| {
-            let user_state = user_state.to_owned();
-            let node_event = ctx.link().callback(move |e| match e {
-                NodeEvent::Select { shift_key } => SelectNode { id, shift_key },
-                NodeEvent::Delete => DeleteNode { id },
-                NodeEvent::DragStart { shift, shift_key } => DragStartNode {
-                    id,
-                    shift,
-                    shift_key,
-                },
-                NodeEvent::Port(PortEvent::MouseDown(id)) => DragStartPort(id),
-                NodeEvent::Port(PortEvent::MouseEnter(id)) => EnterPort(id),
-                NodeEvent::Port(PortEvent::MouseLeave(id)) => LeavePort(id),
-                NodeEvent::User(res) => User(res),
-            });
-            html! {<Node<NodeData, DataType, ValueType, UserState, UserResponse>
-                key={id.to_string()}
-                data={graph[id].clone()}
-                pos={state.node_positions[id]}
-                is_selected={state.selected_nodes.contains(&id)}
-                onevent={node_event}
-                user_state={user_state}
-                graph={state.graph.clone()}
-                ports_ref={state.port_refs.clone()}
-            />}
-        });
-
-        let background_event = ctx.link().callback(|e: BackgroundEvent| match e {
-            BackgroundEvent::ContextMenu(pos) => OpenNodeFinder(pos),
             BackgroundEvent::MouseDown {
                 button,
                 pos,
                 is_shift_key_pressed,
-            } if button != 2 => DragStartBackground {
-                pos,
-                is_shift_key_pressed,
-            },
-            _ => None,
-        });
-
-        let edges_and_drag =get_offset(&state.graph_ref).map(|offset|{
-            let port_refs = state.port_refs.borrow();
-            let drag = match &state.drag_event {
-                Some(DragState::ConnectPort(c)) => {
-                    let connection_in_progress = match c {
-                        ConnectionInProgress::FromInput {
-                            src: from,
-                            dest: to,
-                        } => Some((
-                            to.map_pos(|id| {
-                                port_refs
-                                    .output
-                                    .get(*id)                            .and_then(get_center)
-                                    .map(|p| p - offset)
-                                    .unwrap_or_default()
-                            }),
-                            port_refs
-                                .input
-                                .get(*from)                            .and_then(get_center)
-                                .map(|p| p - offset)
-                                .unwrap_or_default(),
-                            graph.inputs[*from].typ.clone(),
-                        )),
-                        ConnectionInProgress::FromOutput {
-                            src: from,
-                            dest: to,
-                        } => Some((
-                            port_refs
-                                .output
-                                .get(*from)
-                                .and_then(get_center)
-                                .map(|p| p - offset)
-                                .unwrap_or_default(),
-                            to.map_pos(|id| {
-                                port_refs
-                                    .input
-                                    .get(*id)
-                                    .and_then(get_center)
-                                    .map(|p| p - offset)
-                                    .unwrap_or_default()
-                            }),
-                            graph.outputs[*from].typ.clone(),
-                        )),
-                    };
-                    connection_in_progress.map(|(output, input, typ)| {
-                        html! {
-                            <Edge<DataType> {output} {input} {typ}/>
+            } if button != 2 => {
+                {
+                    let mut state = state.borrow_mut();
+                    state.node_finder.is_showing = false;
+                    if !is_shift_key_pressed {
+                        Rc::make_mut(&mut state.selected_nodes).clear();
+                    }
+                    state.start_select_box(pos);
+                }
+                *event_listener.borrow_mut() = set_drag_event(
+                    &state.borrow().graph_ref,
+                    {
+                        let updater = updater.clone();
+                        let state = state.clone();
+                        move |e| {
+                            let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
+                            let end = get_offset_from_current_target(e);
+                            state.borrow_mut().scale_select_box(end);
+                            updater.force_update();
                         }
-                    })
-                }
-                Some(DragState::SelectBox { start, end }) => {
-                    let start = *start;
-                    let end = *end;
-                    Some(html! {
-                        <SelectBox {start} {end} />
-                    })
-                }
-                _ => Option::None,
-            };
-            let graph = state.graph.borrow();
+                    },
+                    {
+                        let updater = updater.clone();
+                        let state = state.clone();
+                        move |_| {
+                            state.borrow_mut().end_select_box();
+                            updater.force_update();
+                        }
+                    },
+                );
+            }
+            _ => (),
+        }
+    });
+    let finder_callback = Callback::from({
+        let _callback = callback.clone();
+        let state = graph_editor_state.clone();
+        let user_state = user_state.clone();
+        let updater = updater.clone();
+        move |t: NodeTemplate| {
+            state.borrow_mut().create_node(t, &user_state);
+            updater.force_update();
+        }
+    });
+    let user_callback = Callback::from({
+        let callback = callback.clone();
+        move |u: UserResponse| {
+            callback.emit(BasicGraphEditorResponse::User(u));
+            updater.force_update();
+        }
+    });
+
+    let state = graph_editor_state.borrow();
+    let graph = &state.graph;
+    let nodes = graph.nodes.keys().map(|id| {
+        let user_state = user_state.to_owned();
+        html! {<Node<NodeData, DataType, ValueType, UserState, UserResponse>
+            key={id.to_string()}
+            data={graph[id].clone()}
+            pos={state.node_positions[id]}
+            is_selected={state.selected_nodes.contains(&id)}
+            node_callback={node_callback.clone()}
+            port_callback={port_callback.clone()}
+            user_callback={user_callback.clone()}
+            user_state={user_state}
+            graph={state.graph.clone()}
+            ports_ref={state.port_refs.clone()}
+        />}
+    });
+
+    let connection_in_progress = state.connection_in_progress().map(|(output, input, typ)| {
+        html! {
+            <Edge<DataType> {output} {input} {typ}/>
+        }
+    });
+    let select_box = state.select_box().map(|(start, end)| {
+        html! {
+            <SelectBox {start} {end} />
+        }
+    });
+    let edges = get_offset(&state.graph_ref).map(|offset|{
             let edges = graph.connections.iter().map(|(input, output)| {
-                let typ = state.graph.borrow().inputs[input].typ.clone();
+                let typ = graph.inputs[input].typ.clone();
                 let output_pos =state
                     .port_refs.borrow()
                     .output
@@ -466,26 +328,26 @@ where
             html! {
                 <>
                 {for edges}
-                {drag}
                 </>
             }
         });
 
-        html! {
-            <GraphArea
-                node_ref={state.graph_ref.clone()}
-                onevent={background_event}
-            >
-            {for nodes}
-            {edges_and_drag}
-            <BasicNodeFinder<NodeTemplate, UserState>
-                is_showing={state.node_finder.is_showing}
-                pos={state.node_finder.pos}
-                user_state={user_state.to_owned()}
-                onevent={ctx.link().callback(|t| CreateNode(t))}
-            />
-            </GraphArea>
-        }
+    html! {
+        <GraphArea
+            node_ref={state.graph_ref.clone()}
+            onevent={background_event}
+        >
+        {for nodes}
+        {edges}
+        {connection_in_progress}
+        {select_box}
+        <BasicNodeFinder<NodeTemplate, UserState>
+            is_showing={state.node_finder.is_showing}
+            pos={state.node_finder.pos}
+            user_state={user_state.to_owned()}
+            onevent={finder_callback}
+        />
+        </GraphArea>
     }
 }
 
@@ -531,4 +393,44 @@ where
             </ul>
         </ContextMenu>
     }
+}
+
+pub enum BasicGraphEditorResponse<NodeData, UserResponse> {
+    ConnectEventStarted(NodeId, AnyParameterId),
+    ConnectEventEnded {
+        output: OutputId,
+        input: InputId,
+    },
+    CreatedNode(NodeId),
+    SelectNode(NodeId),
+
+    DeleteNode {
+        node_id: NodeId,
+        node: crate::state::Node<NodeData>,
+    },
+    DisconnectEvent {
+        output: OutputId,
+        input: InputId,
+    },
+    /// Emitted when a node is interacted with, and should be raised
+    RaiseNode(NodeId),
+    MoveNode {
+        node: NodeId,
+        drag_delta: Vec2,
+    },
+    User(UserResponse),
+}
+
+fn set_drag_event(
+    graph_ref: &NodeRef,
+    mousemove: impl FnMut(&Event) + 'static,
+    mouseup: impl FnMut(&Event) + 'static,
+) -> Option<[EventListener; 2]> {
+    graph_ref.cast::<web_sys::Element>().map(|element| {
+        let document = web_sys::window().unwrap().document().unwrap();
+        [
+            EventListener::new(&document, "mouseup", mouseup),
+            EventListener::new(&element, "mousemove", mousemove),
+        ]
+    })
 }

@@ -5,8 +5,8 @@ use yew::{function_component, html, use_mut_ref, use_state_eq, Html};
 use yew_node_graph::{
     components::basic::BasicGraphEditor,
     state::{
-        DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId, NodeTemplateIter,
-        NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
+        basic::BasicGraphEditorState, DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId,
+        NodeTemplateIter, NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
     },
     *,
 };
@@ -629,28 +629,28 @@ type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
 //     }
 // }
 
+type GraphEditor = BasicGraphEditor<
+    MyNodeData,
+    MyDataType,
+    MyValueType,
+    MyNodeTemplate,
+    Rc<RefCell<MyGraphState>>,
+    MyResponse,
+>;
+type GraphEditorState = BasicGraphEditorState<MyNodeData, MyDataType, MyValueType, MyNodeTemplate>;
+
 #[function_component(App)]
 fn app() -> yew::Html {
     let user_state = use_mut_ref(MyGraphState::default);
+    let graph_editor_state = use_mut_ref(GraphEditorState::default);
     let result = use_state_eq(String::default);
+
     html! {
         <>
         <div style={"padding:5rem"}>
-        <BasicGraphEditor<MyNodeData, MyDataType, MyValueType, MyNodeTemplate>
-            user_state={user_state}
-            callback={{
-                let result = result.clone();
-                move |res|{
-                    match res{
-                        MyResponse::SetActiveNode(id) => {
-                            result.set(id.to_string())
-                        },
-                        MyResponse::ClearActiveNode => {
-                            result.set("".to_string())
-                        },
-                    }
-                }
-            }}
+        <GraphEditor
+            {user_state}
+            {graph_editor_state}
         />
         </div>
         <p>{result.as_str()}</p>

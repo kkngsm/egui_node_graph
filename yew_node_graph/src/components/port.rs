@@ -15,7 +15,7 @@ where
     pub id: PortId,
     pub is_should_draw: bool,
     pub node_ref: NodeRef,
-    pub onevent: Callback<PortEvent>,
+    pub onevent: Callback<(AnyParameterId, PortEvent)>,
 }
 #[function_component(Port)]
 pub fn port<PortId, DataType>(
@@ -39,19 +39,19 @@ where
                 let onevent = onevent.clone();
                 move|e:MouseEvent| {
                         e.stop_propagation();
-                        onevent.emit(PortEvent::MouseDown(id.into()))
+                        onevent.emit((id.into(), PortEvent::MouseDown))
                 }
             }}
             onmouseenter={{
                 let onevent = onevent.clone();
                 move|_:MouseEvent| {
-                        onevent.emit(PortEvent::MouseEnter(id.into()))
+                        onevent.emit((id.into(), PortEvent::MouseEnter))
                 }
             }}
             onmouseleave={{
                 let onevent = onevent.clone();
                 move|_:MouseEvent| {
-                    onevent.emit(PortEvent::MouseLeave(id.into()))
+                    onevent.emit((id.into(), PortEvent::MouseLeave))
                 }
             }}
             ref={node_ref}
@@ -63,7 +63,7 @@ where
 }
 #[derive(Debug, Clone)]
 pub enum PortEvent {
-    MouseDown(AnyParameterId),
-    MouseEnter(AnyParameterId),
-    MouseLeave(AnyParameterId),
+    MouseDown,
+    MouseEnter,
+    MouseLeave,
 }

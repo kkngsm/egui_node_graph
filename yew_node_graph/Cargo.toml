@@ -16,7 +16,7 @@ persistence = ["serde", "slotmap/serde", "smallvec/serde"]
 
 [dependencies]
 glam = {version = "0.22.0", features = ["serde"]}
-gloo = "0.8.0"
+gloo-events = "0.1.2"
 log = "0.4.17"
 serde = {version = "1.0", optional = true, features = ["derive", "rc"]}
 slotmap = {version = "1.0"}
