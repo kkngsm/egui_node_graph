@@ -134,10 +134,12 @@ where
                         }
                     },
                     {
+                        let event_listener = event_listener.clone();
                         let updater = updater.clone();
                         let state = state.clone();
                         move |_| {
                             state.borrow_mut().end_moving_node();
+                            event_listener.borrow_mut().take();
                             updater.force_update();
                         }
                     },
@@ -192,6 +194,7 @@ where
                         }
                     },
                     {
+                        let event_listener = event_listener.clone();
                         let callback = callback.clone();
                         let state = state.clone();
                         let updater = updater.clone();
@@ -202,6 +205,7 @@ where
                                     input,
                                 });
                             }
+                            event_listener.borrow_mut().take();
                             updater.force_update();
                         }
                     },
@@ -288,10 +292,12 @@ where
                         }
                     },
                     {
+                        let event_listener = event_listener.clone();
                         let updater = updater.clone();
                         let state = state.clone();
                         move |_| {
                             state.borrow_mut().end_select_box();
+                            event_listener.borrow_mut().take();
                             updater.force_update();
                         }
                     },
