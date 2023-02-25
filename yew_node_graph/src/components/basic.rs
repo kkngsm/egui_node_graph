@@ -216,11 +216,15 @@ where
                     graph, drag_state, ..
                 } = &mut *state.borrow_mut();
                 if let Some(DragState::ConnectPort(c)) = drag_state.as_mut() {
-                    let typ_eq = c
+                    let is_able_to_connect = c
                         .pair_with(id)
-                        .map(|(output, input)| graph.param_typ_eq(output, input))
+                        .map(|(output, input)| {
+                            // Don't allow self-loops
+                            graph[output].node != graph[input].node
+                                && graph.param_typ_eq(output, input)
+                        })
                         .unwrap_or_default();
-                    if typ_eq {
+                    if is_able_to_connect {
                         c.to_id(id);
                         updater.force_update();
                     }
@@ -235,11 +239,15 @@ where
                     ..
                 } = &mut *state.borrow_mut();
                 if let Some(DragState::ConnectPort(c)) = drag_state.as_mut() {
-                    let typ_eq = c
+                    let is_able_to_connect = c
                         .pair_with(id)
-                        .map(|(output, input)| graph.param_typ_eq(output, input))
+                        .map(|(output, input)| {
+                            // Don't allow self-loops
+                            graph[output].node != graph[input].node
+                                && graph.param_typ_eq(output, input)
+                        })
                         .unwrap_or_default();
-                    if typ_eq {
+                    if is_able_to_connect {
                         let offset = get_offset(graph_ref);
                         let port_pos = port_refs
                             .borrow()
