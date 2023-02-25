@@ -94,19 +94,24 @@ where
     let updater = use_force_update();
 
     let node_callback = Callback::from({
-        let _callback = callback.clone();
+        let callback = callback.clone();
         let state = graph_editor_state.clone();
         let event_listener = event_listener.clone();
         let updater = updater.clone();
         move |(id, n)| match n {
             NodeEvent::Delete => {
-                state.borrow_mut().delete_node(id);
+                let (node, disconnected) = state.borrow_mut().delete_node(id);
+                callback.emit(BasicGraphEditorResponse::DeleteNode { node_id: id, node });
+                for (input, output) in disconnected {
+                    callback.emit(BasicGraphEditorResponse::DisconnectEvent { output, input });
+                }
                 updater.force_update();
             }
             NodeEvent::MouseDown { shift, shift_key } => {
                 {
                     let mut state = state.borrow_mut();
                     state.selection(id, shift_key);
+                    callback.emit(BasicGraphEditorResponse::SelectNode(id));
                     state.start_moving_node(id, shift, shift_key);
                 }
                 updater.force_update();
@@ -114,11 +119,17 @@ where
                     &state.borrow().graph_ref,
                     {
                         let updater = updater.clone();
+                        let callback = callback.clone();
                         let state = state.clone();
                         move |e| {
                             let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
                             let mouse_pos = get_offset_from_current_target(e);
-                            state.borrow_mut().move_node(mouse_pos);
+                            let mut state = state.borrow_mut();
+                            let drag_delta = state.move_node(mouse_pos).unwrap();
+                            for node in state.selected_nodes.iter().copied() {
+                                callback
+                                    .emit(BasicGraphEditorResponse::MoveNode { node, drag_delta });
+                            }
                             updater.force_update();
                         }
                     },
@@ -135,14 +146,39 @@ where
         }
     });
     let port_callback = Callback::from({
-        let _callback = callback.clone();
+        let callback = callback.clone();
         let state = graph_editor_state.clone();
         let event_listener = event_listener.clone();
         let updater = updater.clone();
         move |(id, p)| match p {
             PortEvent::MouseDown => {
-                state.borrow_mut().start_connection(id);
-                updater.force_update();
+                {
+                    let mut state = state.borrow_mut();
+                    if let Some((output, input)) = state.start_connection(id) {
+                        callback.emit(BasicGraphEditorResponse::DisconnectEvent { output, input });
+                        let node = match id {
+                            AnyParameterId::Input(input) => state.graph[input].node,
+                            AnyParameterId::Output(output) => state.graph[output].node,
+                        };
+                        callback.emit(BasicGraphEditorResponse::ConnectEventStarted(node, id))
+                    } else {
+                        match id {
+                            AnyParameterId::Output(output) => {
+                                callback.emit(BasicGraphEditorResponse::ConnectEventStarted(
+                                    state.graph[output].node,
+                                    id,
+                                ))
+                            }
+                            AnyParameterId::Input(input) => {
+                                callback.emit(BasicGraphEditorResponse::ConnectEventStarted(
+                                    state.graph[input].node,
+                                    id,
+                                ))
+                            }
+                        }
+                    }
+                    updater.force_update();
+                }
                 *event_listener.borrow_mut() = set_drag_event(
                     &state.borrow().graph_ref,
                     {
@@ -156,10 +192,16 @@ where
                         }
                     },
                     {
+                        let callback = callback.clone();
                         let state = state.clone();
                         let updater = updater.clone();
                         move |_| {
-                            state.borrow_mut().end_connection();
+                            if let Some((output, input)) = state.borrow_mut().end_connection() {
+                                callback.emit(BasicGraphEditorResponse::ConnectEventEnded {
+                                    output,
+                                    input,
+                                });
+                            }
                             updater.force_update();
                         }
                     },
@@ -210,7 +252,6 @@ where
         }
     });
     let background_event = Callback::from({
-        let _callback = callback.clone();
         let state = graph_editor_state.clone();
         let event_listener = event_listener;
         let updater = updater.clone();
@@ -260,12 +301,13 @@ where
         }
     });
     let finder_callback = Callback::from({
-        let _callback = callback.clone();
+        let callback = callback.clone();
         let state = graph_editor_state.clone();
         let user_state = user_state.clone();
         let updater = updater.clone();
         move |t: NodeTemplate| {
-            state.borrow_mut().create_node(t, &user_state);
+            let id = state.borrow_mut().create_node(t, &user_state);
+            callback.emit(BasicGraphEditorResponse::CreatedNode(id));
             updater.force_update();
         }
     });
@@ -406,7 +448,7 @@ pub enum BasicGraphEditorResponse<NodeData, UserResponse> {
 
     DeleteNode {
         node_id: NodeId,
-        node: crate::state::Node<NodeData>,
+        node: Rc<crate::state::Node<NodeData>>,
     },
     DisconnectEvent {
         output: OutputId,

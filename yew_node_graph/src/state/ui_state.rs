@@ -362,7 +362,6 @@ pub enum DragState {
     MoveNode {
         id: NodeId,
         shift: Vec2,
-        is_moved: bool,
         is_shift_key_pressed: bool,
     },
     ConnectPort(ConnectionInProgress),

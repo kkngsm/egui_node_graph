@@ -125,7 +125,7 @@ where
         selected_nodes.remove(&node_id);
     }
 
-    pub fn create_node(&mut self, template: NodeTemplate, user_state: &UserState) {
+    pub fn create_node(&mut self, template: NodeTemplate, user_state: &UserState) -> NodeId {
         let new_node = Rc::make_mut(&mut self.graph).add_node(
             template.node_graph_label(user_state),
             template.user_data(user_state),
@@ -146,6 +146,7 @@ where
         for output in node.output_ids() {
             port_refs.output.insert(output, Default::default());
         }
+        new_node
     }
 
     pub fn delete_node(
@@ -175,19 +176,12 @@ where
             self.drag_state = Some(DragState::MoveNode {
                 id,
                 shift,
-                is_moved: false,
                 is_shift_key_pressed,
             });
         }
     }
-    pub fn move_node(&mut self, pos: Vec2) {
-        if let Some(DragState::MoveNode {
-            id,
-            shift,
-            is_moved,
-            ..
-        }) = self.drag_state.as_mut()
-        {
+    pub fn move_node(&mut self, pos: Vec2) -> Option<Vec2> {
+        if let Some(DragState::MoveNode { id, shift, .. }) = self.drag_state.as_mut() {
             let pos = pos - *shift;
             let selected_pos = self.node_positions[*id];
             let drag_delta = pos - selected_pos;
@@ -195,29 +189,36 @@ where
             for id in self.selected_nodes.iter().copied() {
                 node_positions[id] += drag_delta;
             }
-            *is_moved = true;
+            Some(drag_delta)
+        } else {
+            None
         }
     }
     pub fn end_moving_node(&mut self) {
         self.drag_state.take();
     }
 
-    pub fn start_connection(&mut self, id: AnyParameterId) {
+    pub fn start_connection(&mut self, id: AnyParameterId) -> Option<(OutputId, InputId)> {
         let pos = self.port_refs.borrow().get(id).and_then(get_center);
         let offset = get_offset(&self.graph_ref);
         let pos = pos.zip(offset).map(|(p, o)| p - o).unwrap_or_default();
 
-        if let AnyParameterId::Input(input) = id {
-            if let Some(output) = Rc::make_mut(&mut self.graph).connections.remove(input) {
-                self.drag_state = Some(DragState::ConnectPort((output, pos).into()));
-            } else {
-                self.drag_state = Some(DragState::ConnectPort((input, pos).into()));
+        match id {
+            AnyParameterId::Input(input) => {
+                if let Some(output) = Rc::make_mut(&mut self.graph).connections.remove(input) {
+                    self.drag_state = Some(DragState::ConnectPort((output, pos).into()));
+                    Some((output, input))
+                } else {
+                    self.drag_state = Some(DragState::ConnectPort((input, pos).into()));
+                    None
+                }
             }
-        } else {
-            self.drag_state = Some(DragState::ConnectPort((id, pos).into()));
+            AnyParameterId::Output(output) => {
+                self.drag_state = Some(DragState::ConnectPort((output, pos).into()));
+                None
+            }
         }
     }
-
     pub fn move_connection(&mut self, pos: Vec2) {
         if let Some(DragState::ConnectPort(c)) = self.drag_state.as_mut() {
             if let ConnectionInProgress::FromInput {
@@ -233,7 +234,7 @@ where
             }
         }
     }
-    pub fn end_connection(&mut self) {
+    pub fn end_connection(&mut self) -> Option<(OutputId, InputId)> {
         if let Some(DragState::ConnectPort(c)) = self.drag_state.take() {
             // Connect to Port
             if let Some((&output, &input)) = c.pair() {
@@ -241,9 +242,11 @@ where
                     Rc::make_mut(&mut self.graph)
                         .connections
                         .insert(input, output);
+                    return Some((output, input));
                 }
             }
         }
+        None
     }
 
     pub fn start_select_box(&mut self, start: Vec2) {
