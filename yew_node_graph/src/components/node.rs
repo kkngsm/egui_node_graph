@@ -101,6 +101,7 @@ where
         graph,
         ports_ref,
         user_state,
+        user_callback,
     );
     let output_ports = output_ports(&data.outputs, port_event, graph, ports_ref);
 
@@ -177,7 +178,7 @@ pub enum NodeRendered {
     Node(NodeId, NodeRef),
 }
 #[allow(clippy::too_many_arguments)]
-pub fn input_ports<NodeData, DataType, ValueType, UserState>(
+pub fn input_ports<NodeData, DataType, ValueType, UserState, UserResponse>(
     ports: &[(Rc<String>, InputId)],
     node_id: NodeId,
     node_data: &Rc<NodeData>,
@@ -185,12 +186,15 @@ pub fn input_ports<NodeData, DataType, ValueType, UserState>(
     graph: &Graph<NodeData, DataType, ValueType>,
     ports_ref: &PortRefs,
     user_state: &UserState,
+    user_callback: &Callback<UserResponse>,
 ) -> Html
 where
     NodeData: 'static,
     DataType: Display + PartialEq + Clone + 'static,
-    ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState> + 'static,
+    ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState, Response = UserResponse>
+        + 'static,
     UserState: Clone + 'static,
+    UserResponse: 'static,
 {
     let widgets = ports.iter().map(|(name, id)| {
         let id = *id;
@@ -200,7 +204,7 @@ where
         let node_ref = ports_ref.borrow()[id].clone();
         let onevent = onevent.clone();
         html! {
-            <PortUnit>
+            <PortUnit key={id.to_string()}>
                 <Port<InputId, DataType>
                     {node_ref}
                     {id}
@@ -208,14 +212,14 @@ where
                     is_should_draw={param.kind.is_should_draw()}
                     {onevent}
                 />
-                <InputWidget<NodeData, DataType, ValueType, UserState>
+                <InputWidget<NodeData, DataType, ValueType, UserState, UserResponse>
                     {name}
                     {is_connected}
                     {param}
                     {node_data}
                     {node_id}
                     user_state={user_state.clone()}
-                    key={id.to_string()}
+                    user_callback={user_callback.clone()}
                 />
             </PortUnit>
         }
@@ -243,7 +247,7 @@ where
         let node_ref = ports_ref.borrow()[id].clone();
         let onevent = onevent.clone();
         html! {
-        <PortUnit>
+        <PortUnit key={id.to_string()}>
             <OutputWidget<DataType>
                 {name}
                 {param}

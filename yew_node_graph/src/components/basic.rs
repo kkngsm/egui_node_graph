@@ -111,9 +111,9 @@ where
                 {
                     let mut state = state.borrow_mut();
                     state.selection(id, shift_key);
-                    callback.emit(BasicGraphEditorResponse::SelectNode(id));
                     state.start_moving_node(id, shift, shift_key);
                 }
+                callback.emit(BasicGraphEditorResponse::SelectNode(id));
                 updater.force_update();
                 *event_listener.borrow_mut() = set_drag_event(
                     &state.borrow().graph_ref,
@@ -124,9 +124,15 @@ where
                         move |e| {
                             let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
                             let mouse_pos = get_offset_from_current_target(e);
-                            let mut state = state.borrow_mut();
-                            let drag_delta = state.move_node(mouse_pos).unwrap();
-                            for node in state.selected_nodes.iter().copied() {
+
+                            let drag_delta = state.borrow_mut().move_node(mouse_pos).unwrap();
+                            for node in state
+                                .borrow()
+                                .selected_nodes
+                                .iter()
+                                .copied()
+                                .collect::<Vec<_>>()
+                            {
                                 callback
                                     .emit(BasicGraphEditorResponse::MoveNode { node, drag_delta });
                             }
@@ -154,33 +160,32 @@ where
         let updater = updater.clone();
         move |(id, p)| match p {
             PortEvent::MouseDown => {
-                {
-                    let mut state = state.borrow_mut();
-                    if let Some((output, input)) = state.start_connection(id) {
-                        callback.emit(BasicGraphEditorResponse::DisconnectEvent { output, input });
-                        let node = match id {
-                            AnyParameterId::Input(input) => state.graph[input].node,
-                            AnyParameterId::Output(output) => state.graph[output].node,
-                        };
-                        callback.emit(BasicGraphEditorResponse::ConnectEventStarted(node, id))
-                    } else {
-                        match id {
-                            AnyParameterId::Output(output) => {
-                                callback.emit(BasicGraphEditorResponse::ConnectEventStarted(
-                                    state.graph[output].node,
-                                    id,
-                                ))
-                            }
-                            AnyParameterId::Input(input) => {
-                                callback.emit(BasicGraphEditorResponse::ConnectEventStarted(
-                                    state.graph[input].node,
-                                    id,
-                                ))
-                            }
+                let connection = state.borrow_mut().start_connection(id);
+                if let Some((output, input)) = connection {
+                    callback.emit(BasicGraphEditorResponse::DisconnectEvent { output, input });
+                    let node = match id {
+                        AnyParameterId::Input(input) => state.borrow().graph[input].node,
+                        AnyParameterId::Output(output) => state.borrow().graph[output].node,
+                    };
+                    callback.emit(BasicGraphEditorResponse::ConnectEventStarted(node, id))
+                } else {
+                    match id {
+                        AnyParameterId::Output(output) => {
+                            callback.emit(BasicGraphEditorResponse::ConnectEventStarted(
+                                state.borrow().graph[output].node,
+                                id,
+                            ))
+                        }
+                        AnyParameterId::Input(input) => {
+                            callback.emit(BasicGraphEditorResponse::ConnectEventStarted(
+                                state.borrow().graph[input].node,
+                                id,
+                            ))
                         }
                     }
-                    updater.force_update();
                 }
+                updater.force_update();
+
                 *event_listener.borrow_mut() = set_drag_event(
                     &state.borrow().graph_ref,
                     {
@@ -199,7 +204,8 @@ where
                         let state = state.clone();
                         let updater = updater.clone();
                         move |_| {
-                            if let Some((output, input)) = state.borrow_mut().end_connection() {
+                            let connection = state.borrow_mut().end_connection();
+                            if let Some((output, input)) = connection {
                                 callback.emit(BasicGraphEditorResponse::ConnectEventEnded {
                                     output,
                                     input,
@@ -333,46 +339,55 @@ where
         }
     });
 
-    let state = graph_editor_state.borrow();
-    let graph = &state.graph;
+    let graph = graph_editor_state.borrow().graph.clone();
     let nodes = graph.nodes.keys().map(|id| {
         let user_state = user_state.to_owned();
         html! {<Node<NodeData, DataType, ValueType, UserState, UserResponse>
             key={id.to_string()}
             data={graph[id].clone()}
-            pos={state.node_positions[id]}
-            is_selected={state.selected_nodes.contains(&id)}
+            pos={graph_editor_state.borrow().node_positions[id]}
+            is_selected={graph_editor_state.borrow().selected_nodes.contains(&id)}
             node_callback={node_callback.clone()}
             port_callback={port_callback.clone()}
             user_callback={user_callback.clone()}
             user_state={user_state}
-            graph={state.graph.clone()}
-            ports_ref={state.port_refs.clone()}
+            graph={graph.clone()}
+            ports_ref={graph_editor_state.borrow().port_refs.clone()}
         />}
     });
 
-    let connection_in_progress = state.connection_in_progress().map(|(output, input, typ)| {
-        html! {
-            <Edge<DataType> {output} {input} {typ}/>
-        }
-    });
-    let select_box = state.select_box().map(|(start, end)| {
-        html! {
-            <SelectBox {start} {end} />
-        }
-    });
-    let edges = get_offset(&state.graph_ref).map(|offset|{
+    let connection_in_progress =
+        graph_editor_state
+            .borrow()
+            .connection_in_progress()
+            .map(|(output, input, typ)| {
+                html! {
+                    <Edge<DataType> {output} {input} {typ}/>
+                }
+            });
+    let select_box = graph_editor_state
+        .borrow()
+        .select_box()
+        .map(|(start, end)| {
+            html! {
+                <SelectBox {start} {end} />
+            }
+        });
+    let edges = get_offset(&graph_editor_state
+        .borrow().graph_ref).map(|offset|{
             let edges = graph.connections.iter().map(|(input, output)| {
                 let typ = graph.inputs[input].typ.clone();
-                let output_pos =state
-                    .port_refs.borrow()
+                let port_refs = graph_editor_state
+                .borrow().port_refs.clone();
+                let output_pos = port_refs
+                    .borrow()
                     .output
                     .get(*output)
                     .and_then(get_center)
                     .map(|p| p - offset)
                     .unwrap_or_default();
-                let input_pos =state
-                    .port_refs.borrow()
+                let input_pos =
+                    port_refs.borrow()
                     .input
                     .get(input)
                     .and_then(get_center)
@@ -390,7 +405,7 @@ where
 
     html! {
         <GraphArea
-            node_ref={state.graph_ref.clone()}
+            node_ref={graph_editor_state.borrow().graph_ref.clone()}
             onevent={background_event}
         >
         {for nodes}
@@ -398,8 +413,8 @@ where
         {connection_in_progress}
         {select_box}
         <BasicNodeFinder<NodeTemplate, UserState>
-            is_showing={state.node_finder.is_showing}
-            pos={state.node_finder.pos}
+            is_showing={graph_editor_state.borrow().node_finder.is_showing}
+            pos={graph_editor_state.borrow().node_finder.pos}
             user_state={user_state.to_owned()}
             onevent={finder_callback}
         />
@@ -451,6 +466,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum BasicGraphEditorResponse<NodeData, UserResponse> {
     ConnectEventStarted(NodeId, AnyParameterId),
     ConnectEventEnded {

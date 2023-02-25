@@ -138,6 +138,4 @@ pub trait NodeTemplateTrait: Clone {
 
 /// The custom user response types when drawing nodes in the graph must
 /// implement this trait.
-pub trait UserResponseTrait: Clone + std::fmt::Debug + PartialEq {
-    fn should_rerender(&self) -> bool;
-}
+pub trait UserResponseTrait: Clone + std::fmt::Debug + PartialEq {}

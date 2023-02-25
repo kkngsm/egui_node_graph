@@ -1,12 +1,12 @@
-use std::{borrow::Cow, cell::RefCell, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use web_sys::{HtmlInputElement, InputEvent};
 use yew::{function_component, html, use_mut_ref, use_state_eq, Html};
 use yew_node_graph::{
-    components::basic::BasicGraphEditor,
+    components::basic::{BasicGraphEditor, BasicGraphEditorResponse},
     state::{
         basic::BasicGraphEditorState, DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId,
-        NodeTemplateIter, NodeTemplateTrait, UserResponseTrait, WidgetValueTrait,
+        NodeTemplateIter, NodeTemplateTrait, OutputId, UserResponseTrait, WidgetValueTrait,
     },
     *,
 };
@@ -15,7 +15,7 @@ use yew_node_graph::{
 /// The NodeData holds a custom data struct inside each node. It's useful to
 /// store additional information that doesn't live in parameters. For this
 /// example, the node data stores the template (i.e. the "type") of the node.
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct MyNodeData {
     template: MyNodeTemplate,
@@ -39,22 +39,41 @@ impl std::fmt::Display for MyDataType {
 /// In the graph, input parameters can optionally have a constant value. This
 /// value can be directly edited in a widget inside the node itself.
 ///
+/// In this example, Inner is wrapped with [`Rc`] and [`RefCell`].
+/// This allows the [`MyValueType::value_widget()`] to change the value.
+///
 /// There will usually be a correspondence between DataTypes and ValueTypes. But
 /// this library makes no attempt to check this consistency. For instance, it is
 /// up to the user code in this example to make sure no parameter is created
 /// with a DataType of Scalar and a ValueType of Vec2.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub enum MyValueType {
-    Vec2 { value: Rc<RefCell<Vec2>> },
-    Scalar { value: Rc<RefCell<f32>> },
+pub struct MyValueType {
+    pub inner: Rc<RefCell<MyValueInner>>,
+}
+impl MyValueType {
+    pub fn vec2(x: f32, y: f32) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(MyValueInner::Vec2 { value: vec2(x, y) })),
+        }
+    }
+    pub fn scalar(value: f32) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(MyValueInner::Scalar { value })),
+        }
+    }
+}
+#[derive(Clone, Copy, Debug)]
+pub enum MyValueInner {
+    Vec2 { value: Vec2 },
+    Scalar { value: f32 },
 }
 
-impl MyValueType {
+impl MyValueInner {
     /// Tries to downcast this value type to a vector
     pub fn try_to_vec2(self) -> anyhow::Result<Vec2> {
-        if let MyValueType::Vec2 { value } = self {
-            Ok(value.borrow().to_owned())
+        if let MyValueInner::Vec2 { value } = self {
+            Ok(value)
         } else {
             anyhow::bail!("Invalid cast from {:?} to vec2", self)
         }
@@ -62,8 +81,8 @@ impl MyValueType {
 
     /// Tries to downcast this value type to a scalar
     pub fn try_to_scalar(self) -> anyhow::Result<f32> {
-        if let MyValueType::Scalar { value } = self {
-            Ok(value.borrow().to_owned())
+        if let MyValueInner::Scalar { value } = self {
+            Ok(value)
         } else {
             anyhow::bail!("Invalid cast from {:?} to scalar", self)
         }
@@ -94,12 +113,14 @@ pub enum MyNodeTemplate {
 pub enum MyResponse {
     SetActiveNode(NodeId),
     ClearActiveNode,
+
+    ValueInput,
 }
 
 /// The graph 'global' state. This state struct is passed around to the node and
 /// parameter drawing callbacks. The contents of this struct are entirely up to
 /// the user. For this example, we use it to keep track of the 'active' node.
-#[derive(Default, PartialEq)]
+#[derive(Default, PartialEq, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct MyGraphState {
     pub active_node: Option<NodeId>,
@@ -123,7 +144,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
     type NodeData = MyNodeData;
     type DataType = MyDataType;
     type ValueType = MyValueType;
-    type UserState = Rc<RefCell<MyGraphState>>;
+    type UserState = MyGraphState;
 
     fn node_finder_label(&self, _user_state: &Self::UserState) -> std::borrow::Cow<str> {
         Cow::Borrowed(match self {
@@ -161,9 +182,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 node_id,
                 name.to_string(),
                 MyDataType::Scalar,
-                MyValueType::Scalar {
-                    value: Rc::new(RefCell::new(0.0)),
-                },
+                MyValueType::scalar(0.0),
                 InputParamKind::ConnectionOrConstant,
                 true,
             );
@@ -173,9 +192,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 node_id,
                 name.to_string(),
                 MyDataType::Vec2,
-                MyValueType::Vec2 {
-                    value: Rc::new(RefCell::new(vec2(0.0, 0.0))),
-                },
+                MyValueType::vec2(0.0, 0.0),
                 InputParamKind::ConnectionOrConstant,
                 true,
             );
@@ -200,9 +217,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                     // The data type for this input. In this case, a scalar
                     MyDataType::Scalar,
                     // The value type for this input. We store zero as default
-                    MyValueType::Scalar {
-                        value: Rc::new(RefCell::new(0.0)),
-                    },
+                    MyValueType::scalar(0.0),
                     // The input parameter kind. This allows defining whether a
                     // parameter accepts input connections and/or an inline
                     // widget to set its value.
@@ -266,7 +281,7 @@ impl NodeTemplateIter for MyNodeTemplate {
 
 impl WidgetValueTrait for MyValueType {
     type Response = MyResponse;
-    type UserState = Rc<RefCell<MyGraphState>>;
+    type UserState = MyGraphState;
     type NodeData = MyNodeData;
     fn value_widget(
         &self,
@@ -274,7 +289,7 @@ impl WidgetValueTrait for MyValueType {
         _node_id: NodeId,
         _user_state: &Self::UserState,
         _node_data: &Self::NodeData,
-        _callback: yew::Callback<Self::Response>,
+        callback: yew::Callback<Self::Response>,
     ) -> Html {
         fn get_value(e: InputEvent) -> f32 {
             let event_target = e.target().unwrap();
@@ -283,11 +298,10 @@ impl WidgetValueTrait for MyValueType {
         }
         // This trait is used to tell the library which UI to display for the
         // inline parameter widgets.
-        match self {
-            MyValueType::Vec2 { value } => {
-                let v = value.borrow();
-                let x = v.x;
-                let y = v.y;
+        match &*self.inner.borrow() {
+            MyValueInner::Vec2 { value } => {
+                let x = value.x;
+                let y = value.y;
                 html! {
                     <>
                     <div>{param_name}</div>
@@ -295,33 +309,49 @@ impl WidgetValueTrait for MyValueType {
                     <input type="number"
                         value={x.to_string()}
                         oninput={{
-                            let value = value.clone();
-                            move |e: InputEvent| value.borrow_mut().x = get_value(e)
+                            // Here, by passing a clone of itself to oninput callback, it can modify itself.
+                            let value = self.clone();
+                            let callback = callback.clone();
+                            move |e: InputEvent| {
+                                if let  MyValueInner::Vec2{value} = &mut *value.inner.borrow_mut(){
+                                    value.x = get_value(e);
+                                    // Note: If callback is executed here, the variable reference is still there,
+                                    // so within the callback function [`RefCell::borrow_mut`] can no longer be executed.
+                                    // callback.emit(MyResponse::ValueInput); <- This can cause panic.
+                                }
+                                callback.emit(MyResponse::ValueInput);
+                            }
                         }}
                     />
                     <label>{"y"}</label>
                     <input type="number"
                         value={y.to_string()}
                         oninput={{
-                            let value = value.clone();
-                            move |e: InputEvent| value.borrow_mut().y = get_value(e)
+                            let value = self.clone();
+                            let callback = callback.clone();
+                            move |e: InputEvent| {if let  MyValueInner::Vec2{value} = &mut *value.inner.borrow_mut(){
+                                value.y = get_value(e);
+
+                            }
+                            callback.emit(MyResponse::ValueInput);}
                         }}
                     />
                     </>
                 }
             }
-            MyValueType::Scalar { value } => {
-                let v = *value.borrow();
+            MyValueInner::Scalar { value } => {
                 html! {
                     <>
                         <div>{param_name}</div>
                         <input type="number"
-                            value={v.to_string()}
+                            value={value.to_string()}
                             oninput={{
-                                let value = value.clone();
-                                move |e: InputEvent| {
-                                    *value.borrow_mut() = get_value(e)
+                                let value = self.clone();
+                                let callback = callback.clone();
+                                move |e: InputEvent| {if let  MyValueInner::Scalar{value} = &mut *value.inner.borrow_mut(){
+                                    *value = get_value(e);
                                 }
+                                callback.emit(MyResponse::ValueInput);}
                             }}
                         />
                     </>
@@ -331,15 +361,9 @@ impl WidgetValueTrait for MyValueType {
     }
 }
 
-impl UserResponseTrait for MyResponse {
-    fn should_rerender(&self) -> bool {
-        match self {
-            MyResponse::SetActiveNode(_) | MyResponse::ClearActiveNode => true,
-        }
-    }
-}
+impl UserResponseTrait for MyResponse {}
 impl NodeDataTrait for MyNodeData {
-    type UserState = Rc<RefCell<MyGraphState>>;
+    type UserState = MyGraphState;
     type DataType = MyDataType;
     type ValueType = MyValueType;
     type Response = MyResponse;
@@ -362,7 +386,6 @@ impl NodeDataTrait for MyNodeData {
         // the value stored in the global user state, and draw different button
         // UIs based on that.
         let is_active = user_state
-            .borrow()
             .active_node
             .map(|id| id == node_id)
             .unwrap_or(false);
@@ -374,9 +397,11 @@ impl NodeDataTrait for MyNodeData {
         if is_active {
             html! {
                 <button onclick={
-                    let user_state = user_state.clone();
+                    // If you wrap the user_state in Rc and RefCell,
+                    // you can change the value in the onclick callback
+                    // let user_state = user_state.clone();
                     move |_| {
-                        user_state.borrow_mut().active_node = None;
+                        // user_state.borrow_mut().active_node = None;
                         callback.emit(MyResponse::ClearActiveNode)
                     }
                 }>{"👁 Active"}</button>
@@ -384,9 +409,9 @@ impl NodeDataTrait for MyNodeData {
         } else {
             html! {
                 <button onclick={
-                    let user_state = user_state.clone();
+                    // let user_state = user_state.clone();
                     move |_| {
-                        user_state.borrow_mut().active_node = Some(node_id);
+                        // user_state.borrow_mut().active_node = Some(node_id);
                         callback.emit(MyResponse::SetActiveNode(node_id))
                     }
                 }>{"👁 Set active"}</button>
@@ -396,247 +421,8 @@ impl NodeDataTrait for MyNodeData {
 }
 
 type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
-
-// #[derive(Default)]
-// pub struct NodeGraphExample {
-//     // The `GraphEditorState` is the top-level object. You "register" all your
-//     // custom types by specifying it as its generic parameters.
-//     state: MyEditorState,
-
-//     user_state: MyGraphState,
-// }
-
-// #[cfg(feature = "persistence")]
-// const PERSISTENCE_KEY: &str = "egui_node_graph";
-
-// #[cfg(feature = "persistence")]
-// impl NodeGraphExample {
-//     /// If the persistence feature is enabled, Called once before the first frame.
-//     /// Load previous app state (if any).
-//     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-//         let state = cc
-//             .storage
-//             .and_then(|storage| eframe::get_value(storage, PERSISTENCE_KEY))
-//             .unwrap_or_default();
-//         Self {
-//             state,
-//             user_state: MyGraphState::default(),
-//         }
-//     }
-// }
-
-// impl eframe::App for NodeGraphExample {
-//     #[cfg(feature = "persistence")]
-//     /// If the persistence function is enabled,
-//     /// Called by the frame work to save state before shutdown.
-//     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-//         eframe::set_value(storage, PERSISTENCE_KEY, &self.state);
-//     }
-//     /// Called each time the UI needs repainting, which may be many times per second.
-//     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
-//     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-//         egui::TopBottomPanel::top("top").show(ctx, |ui| {
-//             egui::menu::bar(ui, |ui| {
-//                 egui::widgets::global_dark_light_mode_switch(ui);
-//             });
-//         });
-//         let graph_response = egui::CentralPanel::default()
-//             .show(ctx, |ui| {
-//                 self.state
-//                     .draw_graph_editor(ui, AllMyNodeTemplates, &mut self.user_state)
-//             })
-//             .inner;
-//         for node_response in graph_response.node_responses {
-//             // Here, we ignore all other graph events. But you may find
-//             // some use for them. For example, by playing a sound when a new
-//             // connection is created
-//             if let NodeResponse::User(user_event) = node_response {
-//                 match user_event {
-//                     MyResponse::SetActiveNode(node) => self.user_state.active_node = Some(node),
-//                     MyResponse::ClearActiveNode => self.user_state.active_node = None,
-//                 }
-//             }
-//         }
-
-//         if let Some(node) = self.user_state.active_node {
-//             if self.state.graph.nodes.contains_key(node) {
-//                 let text = match evaluate_node(&self.state.graph, node, &mut HashMap::new()) {
-//                     Ok(value) => format!("The result is: {:?}", value),
-//                     Err(err) => format!("Execution error: {}", err),
-//                 };
-//                 ctx.debug_painter().text(
-//                     egui::pos2(10.0, 35.0),
-//                     egui::Align2::LEFT_TOP,
-//                     text,
-//                     TextStyle::Button.resolve(&ctx.style()),
-//                     egui::Color32::WHITE,
-//                 );
-//             } else {
-//                 self.user_state.active_node = None;
-//             }
-//         }
-//     }
-// }
-
-// type OutputsCache = HashMap<OutputId, MyValueType>;
-
-// /// Recursively evaluates all dependencies of this node, then evaluates the node itself.
-// pub fn evaluate_node(
-//     graph: &MyGraph,
-//     node_id: NodeId,
-//     outputs_cache: &mut OutputsCache,
-// ) -> anyhow::Result<MyValueType> {
-//     // To solve a similar problem as creating node types above, we define an
-//     // Evaluator as a convenience. It may be overkill for this small example,
-//     // but something like this makes the code much more readable when the
-//     // number of nodes starts growing.
-
-//     struct Evaluator<'a> {
-//         graph: &'a MyGraph,
-//         outputs_cache: &'a mut OutputsCache,
-//         node_id: NodeId,
-//     }
-//     impl<'a> Evaluator<'a> {
-//         fn new(graph: &'a MyGraph, outputs_cache: &'a mut OutputsCache, node_id: NodeId) -> Self {
-//             Self {
-//                 graph,
-//                 outputs_cache,
-//                 node_id,
-//             }
-//         }
-//         fn evaluate_input(&mut self, name: &str) -> anyhow::Result<MyValueType> {
-//             // Calling `evaluate_input` recursively evaluates other nodes in the
-//             // graph until the input value for a paramater has been computed.
-//             evaluate_input(self.graph, self.node_id, name, self.outputs_cache)
-//         }
-//         fn populate_output(
-//             &mut self,
-//             name: &str,
-//             value: MyValueType,
-//         ) -> anyhow::Result<MyValueType> {
-//             // After computing an output, we don't just return it, but we also
-//             // populate the outputs cache with it. This ensures the evaluation
-//             // only ever computes an output once.
-//             //
-//             // The return value of the function is the "final" output of the
-//             // node, the thing we want to get from the evaluation. The example
-//             // would be slightly more contrived when we had multiple output
-//             // values, as we would need to choose which of the outputs is the
-//             // one we want to return. Other outputs could be used as
-//             // intermediate values.
-//             //
-//             // Note that this is just one possible semantic interpretation of
-//             // the graphs, you can come up with your own evaluation semantics!
-//             populate_output(self.graph, self.outputs_cache, self.node_id, name, value)
-//         }
-//         fn input_vector(&mut self, name: &str) -> anyhow::Result<egui::Vec2> {
-//             self.evaluate_input(name)?.try_to_vec2()
-//         }
-//         fn input_scalar(&mut self, name: &str) -> anyhow::Result<f32> {
-//             self.evaluate_input(name)?.try_to_scalar()
-//         }
-//         fn output_vector(&mut self, name: &str, value: egui::Vec2) -> anyhow::Result<MyValueType> {
-//             self.populate_output(name, MyValueType::Vec2 { value })
-//         }
-//         fn output_scalar(&mut self, name: &str, value: f32) -> anyhow::Result<MyValueType> {
-//             self.populate_output(name, MyValueType::Scalar { value })
-//         }
-//     }
-
-//     let node = &graph[node_id];
-//     let mut evaluator = Evaluator::new(graph, outputs_cache, node_id);
-//     match node.user_data.template {
-//         MyNodeTemplate::AddScalar => {
-//             let a = evaluator.input_scalar("A")?;
-//             let b = evaluator.input_scalar("B")?;
-//             evaluator.output_scalar("out", a + b)
-//         }
-//         MyNodeTemplate::SubtractScalar => {
-//             let a = evaluator.input_scalar("A")?;
-//             let b = evaluator.input_scalar("B")?;
-//             evaluator.output_scalar("out", a - b)
-//         }
-//         MyNodeTemplate::VectorTimesScalar => {
-//             let scalar = evaluator.input_scalar("scalar")?;
-//             let vector = evaluator.input_vector("vector")?;
-//             evaluator.output_vector("out", vector * scalar)
-//         }
-//         MyNodeTemplate::AddVector => {
-//             let v1 = evaluator.input_vector("v1")?;
-//             let v2 = evaluator.input_vector("v2")?;
-//             evaluator.output_vector("out", v1 + v2)
-//         }
-//         MyNodeTemplate::SubtractVector => {
-//             let v1 = evaluator.input_vector("v1")?;
-//             let v2 = evaluator.input_vector("v2")?;
-//             evaluator.output_vector("out", v1 - v2)
-//         }
-//         MyNodeTemplate::MakeVector => {
-//             let x = evaluator.input_scalar("x")?;
-//             let y = evaluator.input_scalar("y")?;
-//             evaluator.output_vector("out", egui::vec2(x, y))
-//         }
-//         MyNodeTemplate::MakeScalar => {
-//             let value = evaluator.input_scalar("value")?;
-//             evaluator.output_scalar("out", value)
-//         }
-//     }
-// }
-
-// fn populate_output(
-//     graph: &MyGraph,
-//     outputs_cache: &mut OutputsCache,
-//     node_id: NodeId,
-//     param_name: &str,
-//     value: MyValueType,
-// ) -> anyhow::Result<MyValueType> {
-//     let output_id = graph[node_id].get_output(param_name)?;
-//     outputs_cache.insert(output_id, value);
-//     Ok(value)
-// }
-
-// // Evaluates the input value of
-// fn evaluate_input(
-//     graph: &MyGraph,
-//     node_id: NodeId,
-//     param_name: &str,
-//     outputs_cache: &mut OutputsCache,
-// ) -> anyhow::Result<MyValueType> {
-//     let input_id = graph[node_id].get_input(param_name)?;
-
-//     // The output of another node is connected.
-//     if let Some(other_output_id) = graph.connection(input_id) {
-//         // The value was already computed due to the evaluation of some other
-//         // node. We simply return value from the cache.
-//         if let Some(other_value) = outputs_cache.get(&other_output_id) {
-//             Ok(*other_value)
-//         }
-//         // This is the first time encountering this node, so we need to
-//         // recursively evaluate it.
-//         else {
-//             // Calling this will populate the cache
-//             evaluate_node(graph, graph[other_output_id].node, outputs_cache)?;
-
-//             // Now that we know the value is cached, return it
-//             Ok(*outputs_cache
-//                 .get(&other_output_id)
-//                 .expect("Cache should be populated"))
-//         }
-//     }
-//     // No existing connection, take the inline value instead.
-//     else {
-//         Ok(graph[input_id].value)
-//     }
-// }
-
-type GraphEditor = BasicGraphEditor<
-    MyNodeData,
-    MyDataType,
-    MyValueType,
-    MyNodeTemplate,
-    Rc<RefCell<MyGraphState>>,
-    MyResponse,
->;
+type GraphEditor =
+    BasicGraphEditor<MyNodeData, MyDataType, MyValueType, MyNodeTemplate, MyGraphState, MyResponse>;
 type GraphEditorState = BasicGraphEditorState<MyNodeData, MyDataType, MyValueType, MyNodeTemplate>;
 
 #[function_component(App)]
@@ -645,21 +431,211 @@ fn app() -> yew::Html {
     let graph_editor_state = use_mut_ref(GraphEditorState::default);
     let result = use_state_eq(String::default);
 
+    let callback = {
+        let graph_editor_state = graph_editor_state.clone();
+        let user_state = user_state.clone();
+        let result = result.clone();
+        move |r| {
+            log::debug!("{:?}", &r);
+            if let BasicGraphEditorResponse::User(user_event) = r {
+                match user_event {
+                    MyResponse::SetActiveNode(node) => {
+                        user_state.borrow_mut().active_node = Some(node)
+                    }
+                    MyResponse::ClearActiveNode => user_state.borrow_mut().active_node = None,
+                    _ => (),
+                }
+            }
+            let text = update(
+                &mut user_state.borrow_mut(),
+                &graph_editor_state.borrow().graph,
+            )
+            .unwrap_or_else(|| " ".to_string());
+            result.set(text);
+        }
+    };
+
     html! {
         <>
-        <div style={"padding:5rem"}>
+        <div style={"padding:1rem;"}>
         <GraphEditor
-            {user_state}
+            user_state={(*user_state.borrow()).clone()}
             {graph_editor_state}
+            {callback}
         />
         </div>
-        <p>{result.as_str()}</p>
+        <p style={"position:absolute;top:0;"}>{result.as_str()}</p>
         </>
+    }
+}
+
+fn update(user_state: &mut MyGraphState, graph: &MyGraph) -> Option<String> {
+    if let Some(node) = user_state.active_node {
+        if graph.nodes.contains_key(node) {
+            let text = match evaluate_node(graph, node, &mut HashMap::new()) {
+                Ok(value) => format!("The result is: {:?}", value),
+                Err(err) => format!("Execution error: {}", err),
+            };
+            return Some(text);
+        } else {
+            user_state.active_node = None;
+        }
+    }
+    None
+}
+
+type OutputsCache = HashMap<OutputId, MyValueInner>;
+
+/// Recursively evaluates all dependencies of this node, then evaluates the node itself.
+pub fn evaluate_node(
+    graph: &MyGraph,
+    node_id: NodeId,
+    outputs_cache: &mut OutputsCache,
+) -> anyhow::Result<MyValueInner> {
+    // To solve a similar problem as creating node types above, we define an
+    // Evaluator as a convenience. It may be overkill for this small example,
+    // but something like this makes the code much more readable when the
+    // number of nodes starts growing.
+
+    struct Evaluator<'a> {
+        graph: &'a MyGraph,
+        outputs_cache: &'a mut OutputsCache,
+        node_id: NodeId,
+    }
+    impl<'a> Evaluator<'a> {
+        fn new(graph: &'a MyGraph, outputs_cache: &'a mut OutputsCache, node_id: NodeId) -> Self {
+            Self {
+                graph,
+                outputs_cache,
+                node_id,
+            }
+        }
+        fn evaluate_input(&mut self, name: &str) -> anyhow::Result<MyValueInner> {
+            // Calling `evaluate_input` recursively evaluates other nodes in the
+            // graph until the input value for a paramater has been computed.
+            evaluate_input(self.graph, self.node_id, name, self.outputs_cache)
+        }
+        fn populate_output(
+            &mut self,
+            name: &str,
+            value: MyValueInner,
+        ) -> anyhow::Result<MyValueInner> {
+            // After computing an output, we don't just return it, but we also
+            // populate the outputs cache with it. This ensures the evaluation
+            // only ever computes an output once.
+            //
+            // The return value of the function is the "final" output of the
+            // node, the thing we want to get from the evaluation. The example
+            // would be slightly more contrived when we had multiple output
+            // values, as we would need to choose which of the outputs is the
+            // one we want to return. Other outputs could be used as
+            // intermediate values.
+            //
+            // Note that this is just one possible semantic interpretation of
+            // the graphs, you can come up with your own evaluation semantics!
+            populate_output(self.graph, self.outputs_cache, self.node_id, name, value)
+        }
+        fn input_vector(&mut self, name: &str) -> anyhow::Result<Vec2> {
+            self.evaluate_input(name)?.try_to_vec2()
+        }
+        fn input_scalar(&mut self, name: &str) -> anyhow::Result<f32> {
+            self.evaluate_input(name)?.try_to_scalar()
+        }
+        fn output_vector(&mut self, name: &str, value: Vec2) -> anyhow::Result<MyValueInner> {
+            self.populate_output(name, MyValueInner::Vec2 { value })
+        }
+        fn output_scalar(&mut self, name: &str, value: f32) -> anyhow::Result<MyValueInner> {
+            self.populate_output(name, MyValueInner::Scalar { value })
+        }
+    }
+
+    let node = &graph[node_id];
+    let mut evaluator = Evaluator::new(graph, outputs_cache, node_id);
+    match node.user_data.template {
+        MyNodeTemplate::AddScalar => {
+            let a = evaluator.input_scalar("A")?;
+            let b = evaluator.input_scalar("B")?;
+            evaluator.output_scalar("out", a + b)
+        }
+        MyNodeTemplate::SubtractScalar => {
+            let a = evaluator.input_scalar("A")?;
+            let b = evaluator.input_scalar("B")?;
+            evaluator.output_scalar("out", a - b)
+        }
+        MyNodeTemplate::VectorTimesScalar => {
+            let scalar = evaluator.input_scalar("scalar")?;
+            let vector = evaluator.input_vector("vector")?;
+            evaluator.output_vector("out", vector * scalar)
+        }
+        MyNodeTemplate::AddVector => {
+            let v1 = evaluator.input_vector("v1")?;
+            let v2 = evaluator.input_vector("v2")?;
+            evaluator.output_vector("out", v1 + v2)
+        }
+        MyNodeTemplate::SubtractVector => {
+            let v1 = evaluator.input_vector("v1")?;
+            let v2 = evaluator.input_vector("v2")?;
+            evaluator.output_vector("out", v1 - v2)
+        }
+        MyNodeTemplate::MakeVector => {
+            let x = evaluator.input_scalar("x")?;
+            let y = evaluator.input_scalar("y")?;
+            evaluator.output_vector("out", vec2(x, y))
+        }
+        MyNodeTemplate::MakeScalar => {
+            let value = evaluator.input_scalar("value")?;
+            evaluator.output_scalar("out", value)
+        }
+    }
+}
+
+fn populate_output(
+    graph: &MyGraph,
+    outputs_cache: &mut OutputsCache,
+    node_id: NodeId,
+    param_name: &str,
+    value: MyValueInner,
+) -> anyhow::Result<MyValueInner> {
+    let output_id = graph[node_id].get_output(param_name)?;
+    outputs_cache.insert(output_id, value);
+    Ok(value)
+}
+
+// Evaluates the input value of
+fn evaluate_input(
+    graph: &MyGraph,
+    node_id: NodeId,
+    param_name: &str,
+    outputs_cache: &mut OutputsCache,
+) -> anyhow::Result<MyValueInner> {
+    let input_id = graph[node_id].get_input(param_name)?;
+
+    // The output of another node is connected.
+    if let Some(other_output_id) = graph.connection(input_id) {
+        // The value was already computed due to the evaluation of some other
+        // node. We simply return value from the cache.
+        if let Some(other_value) = outputs_cache.get(&other_output_id) {
+            Ok(*other_value)
+        }
+        // This is the first time encountering this node, so we need to
+        // recursively evaluate it.
+        else {
+            // Calling this will populate the cache
+            evaluate_node(graph, graph[other_output_id].node, outputs_cache)?;
+
+            // Now that we know the value is cached, return it
+            Ok(*outputs_cache
+                .get(&other_output_id)
+                .expect("Cache should be populated"))
+        }
+    }
+    // No existing connection, take the inline value instead.
+    else {
+        Ok(*graph[input_id].value.inner.borrow())
     }
 }
 
 fn main() {
     wasm_logger::init(wasm_logger::Config::default());
-
     yew::Renderer::<App>::new().render();
 }

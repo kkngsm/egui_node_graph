@@ -5,17 +5,18 @@ use yew::{function_component, html, Callback, Html, Properties};
 use crate::state::{InputParam, NodeId, OutputParam, WidgetValueTrait};
 
 #[derive(Properties)]
-pub struct InputWidgetProps<NodeData, DataType, ValueType, UserState> {
+pub struct InputWidgetProps<NodeData, DataType, ValueType, UserState, UserResponse> {
     pub name: Rc<String>,
     pub param: Rc<InputParam<DataType, ValueType>>,
     pub node_data: Rc<NodeData>,
     pub node_id: NodeId,
     pub is_connected: bool,
     pub user_state: UserState,
+    pub user_callback: Callback<UserResponse>,
 }
 
 #[function_component(InputWidget)]
-pub fn input_widget<NodeData, DataType, ValueType, UserState>(
+pub fn input_widget<NodeData, DataType, ValueType, UserState, UserResponse>(
     InputWidgetProps {
         is_connected,
         param,
@@ -23,11 +24,13 @@ pub fn input_widget<NodeData, DataType, ValueType, UserState>(
         node_data,
         node_id,
         user_state,
-    }: &InputWidgetProps<NodeData, DataType, ValueType, UserState>,
+        user_callback,
+    }: &InputWidgetProps<NodeData, DataType, ValueType, UserState, UserResponse>,
 ) -> Html
 where
     DataType: Display,
-    ValueType: WidgetValueTrait<NodeData = NodeData, UserState = UserState>,
+    ValueType:
+        WidgetValueTrait<NodeData = NodeData, UserState = UserState, Response = UserResponse>,
 {
     let widget = if *is_connected {
         html! {name.as_str()}
@@ -37,7 +40,7 @@ where
             *node_id,
             user_state,
             node_data,
-            Callback::from(|_| {}),
+            user_callback.clone(),
         )
     };
     html! {
@@ -74,8 +77,8 @@ where
     }
 }
 
-impl<NodeData, DataType, ValueType, UserState> PartialEq
-    for InputWidgetProps<NodeData, DataType, ValueType, UserState>
+impl<NodeData, DataType, ValueType, UserState, UserResponse> PartialEq
+    for InputWidgetProps<NodeData, DataType, ValueType, UserState, UserResponse>
 {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.name, &other.name)
@@ -83,6 +86,7 @@ impl<NodeData, DataType, ValueType, UserState> PartialEq
             && Rc::ptr_eq(&self.param, &other.param)
             && self.node_id == other.node_id
             && self.is_connected == other.is_connected
+            && self.user_callback == other.user_callback
         // The following always return True, because RefCell is used.
         // && Rc::ptr_eq(&self.user_state, &other.user_state)
     }
