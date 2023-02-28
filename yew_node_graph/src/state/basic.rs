@@ -171,13 +171,9 @@ where
         self.node_finder.pos = pos;
     }
 
-    pub fn start_moving_node(&mut self, id: NodeId, shift: Vec2, is_shift_key_pressed: bool) {
+    pub fn start_moving_node(&mut self, id: NodeId, shift: Vec2) {
         if self.selected_nodes.contains(&id) {
-            self.drag_state = Some(DragState::MoveNode {
-                id,
-                shift,
-                is_shift_key_pressed,
-            });
+            self.drag_state = Some(DragState::MoveNode { id, shift });
         }
     }
     pub fn move_node(&mut self, pos: Vec2) -> Option<Vec2> {

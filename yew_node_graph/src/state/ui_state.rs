@@ -355,14 +355,7 @@ impl From<(InputId, Vec2)> for ConnectionInProgress {
 
 #[derive(Clone)]
 pub enum DragState {
-    SelectBox {
-        start: Vec2,
-        end: Vec2,
-    },
-    MoveNode {
-        id: NodeId,
-        shift: Vec2,
-        is_shift_key_pressed: bool,
-    },
+    SelectBox { start: Vec2, end: Vec2 },
+    MoveNode { id: NodeId, shift: Vec2 },
     ConnectPort(ConnectionInProgress),
 }

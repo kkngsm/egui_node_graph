@@ -111,7 +111,7 @@ where
                 {
                     let mut state = state.borrow_mut();
                     state.selection(id, shift_key);
-                    state.start_moving_node(id, shift, shift_key);
+                    state.start_moving_node(id, shift);
                 }
                 callback.emit(BasicGraphEditorResponse::SelectNode(id));
                 updater.force_update();
@@ -326,7 +326,11 @@ where
         let user_state = user_state.clone();
         let updater = updater.clone();
         move |t: NodeTemplate| {
-            let id = state.borrow_mut().create_node(t, &user_state);
+            let id = {
+                let mut state = state.borrow_mut();
+                state.node_finder.is_showing = false;
+                state.create_node(t, &user_state)
+            };
             callback.emit(BasicGraphEditorResponse::CreatedNode(id));
             updater.force_update();
         }
@@ -454,7 +458,12 @@ where
     let buttons = NodeTemplate::all_kinds().into_iter().map(|t| {
         let onevent = onevent.clone();
         html! {
-            <li><button onclick={move |_| onevent.emit(t)}>{t.node_finder_label(user_state)}</button></li>
+            <li><button
+                onclick={move |_| onevent.emit(t)}
+                onmousedown={move |e:MouseEvent| e.stop_propagation()}
+            >
+                {t.node_finder_label(user_state)}
+            </button></li>
         }
     });
     html! {
