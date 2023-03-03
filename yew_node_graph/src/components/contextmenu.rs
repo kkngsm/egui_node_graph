@@ -1,20 +1,31 @@
 use crate::Vec2;
 use stylist::yew::styled_component;
 use yew::prelude::*;
+
+/// Properties of [`ContextMenu`]
 #[derive(Properties, PartialEq)]
 pub struct ContextMenuProps {
     #[prop_or_default]
     pub children: Children,
+    /// display: `block` or `none`
     pub is_showing: bool,
+    /// Top left position of context menu
     pub pos: Vec2,
 }
 
 /// ContextMenu component
-/// this components have `node-graph-contextmenu` class
 ///
-/// # Default style
-/// ```css
-/// position:absolute;
+/// The following are the HTML attributes of this component.
+/// The minimum style that does not interfere with operation is set.
+/// ```text
+/// class: "edge"
+/// data-type: `DataType::to_string()`
+/// style: {
+///     position:absolute;
+///     top: {}px;
+///     left: {}px;
+///     display: {};
+/// }
 /// ```
 #[styled_component(ContextMenu)]
 pub fn contextmenu(

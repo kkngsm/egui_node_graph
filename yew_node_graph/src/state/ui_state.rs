@@ -1,5 +1,5 @@
-#[derive(Default, Copy, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Default, Copy, Clone)]
 pub struct PanZoom {
     pub pan: crate::Vec2,
     pub zoom: f32,
@@ -36,7 +36,7 @@ use glam::Vec2;
 use slotmap::SecondaryMap;
 
 use super::{AnyParameterId, InputId, NodeId, OutputId};
-
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct PortsData<T> {
     pub input: SecondaryMap<InputId, T>,
@@ -101,6 +101,7 @@ pub type PortRefs = Rc<RefCell<PortsData<yew::NodeRef>>>;
 
 /// this have Port or free (mouse) where the connection is going.
 /// This is mainly used in [`ConnectionInProgress`]
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectTo<Id> {
     Id(Id),
@@ -149,6 +150,7 @@ impl<Id> From<Vec2> for ConnectTo<Id> {
 
 /// An ongoing connection interaction: The mouse has dragged away from a
 /// port and the user is holding the click
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionInProgress {
     FromInput {
@@ -164,7 +166,7 @@ pub enum ConnectionInProgress {
 impl ConnectionInProgress {
     /// Change the destination to PortId from Position
     /// # Example
-    /// ```
+    /// ```rust
     /// use yew_node_graph::{
     ///     state::{ConnectTo, ConnectionInProgress, InputId, OutputId},
     ///     vec2,
@@ -183,9 +185,7 @@ impl ConnectionInProgress {
     ///         }
     ///     );
     ///
-    ///     // Do nothing if the following
-    ///
-    ///     // Inputs cannot be connected to inputs.
+    ///     // Input cannot be connected to input.
     ///     connection_in_progress.to_id(another_input.into());
     /// }
     /// ```
@@ -202,7 +202,7 @@ impl ConnectionInProgress {
     }
     /// Change the destination to Position from Port
     /// # Example
-    /// ```
+    /// ```rust
     /// use yew_node_graph::{
     ///     state::{ConnectTo, ConnectionInProgress, InputId, OutputId},
     ///     vec2,
@@ -220,6 +220,7 @@ impl ConnectionInProgress {
     ///             dest: ConnectTo::Pos(vec2(12.0, 34.0)),
     ///         }
     ///     );
+    /// }
     /// ```
     pub fn to_pos(&mut self, pos: Vec2) {
         match self {
@@ -229,7 +230,7 @@ impl ConnectionInProgress {
     }
     /// If an output/input pair is created between src and dest, it is returned.
     /// # Example
-    /// ```
+    /// ```rust
     /// use yew_node_graph::{
     ///     state::{
     ///         ConnectTo, ConnectionInProgress, InputId, OutputId,
@@ -274,7 +275,7 @@ impl ConnectionInProgress {
 
     ///　If an output/input pair is created between the argument and itself's src, it is returned.
     /// # Example
-    /// ```
+    /// ```rust
     /// use yew_node_graph::{
     ///     state::{
     ///         ConnectTo, ConnectionInProgress, InputId, OutputId,
@@ -352,10 +353,21 @@ impl From<(InputId, Vec2)> for ConnectionInProgress {
         }
     }
 }
-
-#[derive(Clone)]
+/// What to do when a drag operation is performed.
+/// If starting dragging from the background, it becomes [`DragState::SelectBox`],
+/// if starting on a node, it becomes [`DragState::MoveNode`],
+/// and if starting on a Port, it becomes [`DragState::ConnectPort`].
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone)]
 pub enum DragState {
-    SelectBox { start: Vec2, end: Vec2 },
-    MoveNode { id: NodeId, shift: Vec2 },
+    SelectBox {
+        start: Vec2,
+        end: Vec2,
+    },
+    MoveNode {
+        id: NodeId,
+        /// Mouse down position in node
+        shift: Vec2,
+    },
     ConnectPort(ConnectionInProgress),
 }

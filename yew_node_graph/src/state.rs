@@ -29,4 +29,6 @@ pub use ui_state::*;
 pub mod traits;
 pub use traits::*;
 
-pub mod basic;
+/// State used primarily with BasicGraphEditor
+pub mod graph_editor;
+pub use graph_editor::*;

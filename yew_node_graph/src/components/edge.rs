@@ -4,15 +4,38 @@ use glam::{vec2, Vec2};
 use stylist::yew::styled_component;
 use yew::{html, Html, Properties};
 
+/// Properties of [`Edge`]
 #[derive(Properties, PartialEq)]
 pub struct EdgeProps<DataType>
 where
     DataType: Display + Clone + PartialEq + 'static,
 {
+    /// position of output
     pub output: Vec2,
+    /// position of input
     pub input: Vec2,
+    /// data type
+    /// Can be used to change colors
     pub typ: DataType,
 }
+
+/// Data connections between nodes
+///
+/// The color can be changed by using the attribute selector in css
+/// and the `data-type` attribute.
+///
+/// The following are the HTML attributes of this component.
+/// The minimum style that does not interfere with operation is set.
+/// ```text
+/// class: "edge"
+/// data-type: `DataType::to_string()`
+/// style: {
+///     position:absolute;
+///     top:0px;
+///     left:0px;
+///     pointer-events: none;
+/// }
+/// ```
 #[styled_component(Edge)]
 pub fn edge<DataType>(EdgeProps { output, input, typ }: &EdgeProps<DataType>) -> Html
 where
@@ -28,7 +51,7 @@ left:0px;
 pointer-events: none;
 "};
     html! {
-            <svg xmlns={"http://www.w3.org/2000/svg"}
+            <svg
                 class={svg_class}
                 height={"100%"} width={"100%"}>
                 <path class={"edge"}

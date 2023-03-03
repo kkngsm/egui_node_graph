@@ -1,10 +1,13 @@
-pub mod unit;
-pub mod widget;
+mod unit;
+pub use unit::*;
+mod widget;
 use std::fmt::Display;
 use web_sys::MouseEvent;
+pub use widget::*;
 use yew::{function_component, html, Callback, Html, NodeRef, Properties};
 
 use crate::state::AnyParameterId;
+/// Properties of [`Port`]
 #[derive(Properties, PartialEq)]
 pub struct PortProps<PortId, DataType>
 where
@@ -17,6 +20,15 @@ where
     pub node_ref: NodeRef,
     pub onevent: Callback<(AnyParameterId, PortEvent)>,
 }
+/// Port component
+///
+/// The following are the HTML attributes of this component.
+/// The minimum style that does not interfere with operation is set.
+/// ```text
+/// class: "port"
+/// data-type: `DataType.to_string()`
+/// data-is-should-draw: `is_should_draw.to_string()`
+/// ```
 #[function_component(Port)]
 pub fn port<PortId, DataType>(
     PortProps {

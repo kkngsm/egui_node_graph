@@ -3,10 +3,10 @@ use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use web_sys::{HtmlInputElement, InputEvent};
 use yew::{function_component, html, use_mut_ref, use_state_eq, Html};
 use yew_node_graph::{
-    components::basic::{BasicGraphEditor, BasicGraphEditorResponse},
+    components::GraphEditorResponse,
     state::{
-        basic::BasicGraphEditorState, DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId,
-        NodeTemplateIter, NodeTemplateTrait, OutputId, UserResponseTrait, WidgetValueTrait,
+        DataTypeTrait, Graph, InputParamKind, NodeDataTrait, NodeId, NodeTemplateIter,
+        NodeTemplateTrait, OutputId, UserResponseTrait, WidgetValueTrait,
     },
     *,
 };
@@ -421,9 +421,16 @@ impl NodeDataTrait for MyNodeData {
 }
 
 type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
-type GraphEditor =
-    BasicGraphEditor<MyNodeData, MyDataType, MyValueType, MyNodeTemplate, MyGraphState, MyResponse>;
-type GraphEditorState = BasicGraphEditorState<MyNodeData, MyDataType, MyValueType, MyNodeTemplate>;
+type GraphEditor = yew_node_graph::components::GraphEditor<
+    MyNodeData,
+    MyDataType,
+    MyValueType,
+    MyNodeTemplate,
+    MyGraphState,
+    MyResponse,
+>;
+type GraphEditorState =
+    yew_node_graph::state::GraphEditorState<MyNodeData, MyDataType, MyValueType, MyNodeTemplate>;
 
 #[function_component(App)]
 fn app() -> yew::Html {
@@ -437,7 +444,7 @@ fn app() -> yew::Html {
         let result = result.clone();
         move |r| {
             log::debug!("{:?}", &r);
-            if let BasicGraphEditorResponse::User(user_event) = r {
+            if let GraphEditorResponse::User(user_event) = r {
                 match user_event {
                     MyResponse::SetActiveNode(node) => {
                         user_state.borrow_mut().active_node = Some(node)

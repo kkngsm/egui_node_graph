@@ -2,13 +2,27 @@ use glam::Vec2;
 use stylist::yew::styled_component;
 use yew::prelude::*;
 
-use crate::utils::{get_offset_from_current_target, use_event_listeners};
+use crate::utils::{get_mouse_pos_from_current_target, use_event_listeners};
+
+/// Properties of [`GraphArea`]
 #[derive(Properties, PartialEq)]
 pub struct GraphProps {
     pub children: Children,
     pub node_ref: NodeRef,
     pub onevent: Callback<BackgroundEvent>,
 }
+/// Area for drawing nodes, edges, select box, etc.
+///
+/// this raises [`BackgroundEvent`].
+///
+/// The following are the HTML attributes of this component.
+/// The minimum style that does not interfere with operation is set.
+/// ```text
+/// class: "graph-area"
+/// style: {
+///     position: relative;
+/// }
+/// ```
 #[styled_component(GraphArea)]
 pub fn graph_area(
     GraphProps {
@@ -27,7 +41,7 @@ pub fn graph_area(
                     move |e| {
                         e.prevent_default();
                         onevent.emit(BackgroundEvent::ContextMenu(
-                            get_offset_from_current_target(&e),
+                            get_mouse_pos_from_current_target(&e),
                         ))
                     }
                 }),
@@ -39,7 +53,7 @@ pub fn graph_area(
                     move |e| {
                         onevent.emit(BackgroundEvent::MouseDown {
                             button: e.button(),
-                            pos: get_offset_from_current_target(&e),
+                            pos: get_mouse_pos_from_current_target(&e),
                             is_shift_key_pressed: e.shift_key(),
                         })
                     }
@@ -62,6 +76,7 @@ position:relative;
     }
 }
 
+/// Arguments of event callback in [`GraphArea`]
 #[derive(Debug)]
 pub enum BackgroundEvent {
     ContextMenu(Vec2),

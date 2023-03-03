@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use yew::{Callback, Html};
 
 use super::*;
@@ -34,7 +36,7 @@ pub trait WidgetValueTrait {
 /// [`Graph`]. This trait tells the library how to visually expose data types
 /// to the user.
 pub trait DataTypeTrait<UserState>: PartialEq + Eq {
-    /// The name of this datatype. Return type is specified as Cow<str> because
+    /// The name of this datatype. Return type is specified as [`Cow<str>`] because
     /// some implementations will need to allocate a new string to provide an
     /// answer while others won't.
     ///
@@ -99,7 +101,7 @@ pub trait NodeTemplateIter {
 }
 
 /// This trait must be implemented by the `NodeTemplate` generic parameter of
-/// the [`GraphEditorState`]. It allows the customization of node templates. A
+/// the [`GraphEditorState`](crate::state::GraphEditorState). It allows the customization of node templates. A
 /// node template is what describes what kinds of nodes can be added to the
 /// graph, what is their name, and what are their input / output parameters.
 pub trait NodeTemplateTrait: Clone {
@@ -114,10 +116,10 @@ pub trait NodeTemplateTrait: Clone {
 
     /// Returns a descriptive name for the node kind, used in the node finder.
     ///
-    /// The return type is Cow<str> to allow returning owned or borrowed values
+    /// The return type is [`Cow<str>`] to allow returning owned or borrowed values
     /// more flexibly. Refer to the documentation for `DataTypeTrait::name` for
     /// more information
-    fn node_finder_label(&self, user_state: &Self::UserState) -> std::borrow::Cow<str>;
+    fn node_finder_label(&self, user_state: &Self::UserState) -> Cow<str>;
 
     /// Returns a descriptive name for the node kind, used in the graph.
     fn node_graph_label(&self, user_state: &Self::UserState) -> String;

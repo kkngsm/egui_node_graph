@@ -20,11 +20,9 @@ use yew::NodeRef;
 use super::{AnyParameterId, ConnectionInProgress, InputId, Node, OutputId};
 
 /// Basic GraphEditor components
-/// The following limitations apply
-/// - NodeFinder is the default
-/// - UserState must implement PartialEq
-/// If you want a broader implementation, you may want to define your own components
-pub struct BasicGraphEditorState<NodeData, DataType, ValueType, NodeTemplate> {
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone)]
+pub struct GraphEditorState<NodeData, DataType, ValueType, NodeTemplate> {
     pub graph: Rc<Graph<NodeData, DataType, ValueType>>,
     //TODO
     // /// Nodes are drawn in this order. Draw order is important because nodes
@@ -52,7 +50,7 @@ pub struct BasicGraphEditorState<NodeData, DataType, ValueType, NodeTemplate> {
 }
 
 impl<NodeData, DataType, ValueType, NodeTemplate> Default
-    for BasicGraphEditorState<NodeData, DataType, ValueType, NodeTemplate>
+    for GraphEditorState<NodeData, DataType, ValueType, NodeTemplate>
 {
     fn default() -> Self {
         Self {
@@ -69,7 +67,7 @@ impl<NodeData, DataType, ValueType, NodeTemplate> Default
 }
 
 impl<NodeData, DataType, ValueType, NodeTemplate, UserState, UserResponse>
-    BasicGraphEditorState<NodeData, DataType, ValueType, NodeTemplate>
+    GraphEditorState<NodeData, DataType, ValueType, NodeTemplate>
 where
     NodeData: NodeDataTrait<
             DataType = DataType,
@@ -88,17 +86,18 @@ where
         > + NodeTemplateIter<Item = NodeTemplate>,
     UserResponse: 'static,
 {
+    #[cfg_attr(doc, aquamarine::aquamarine)]
     /// ```mermaid
     /// graph LR
     /// Node --> select?{is selected?}
     /// select? -- yes --> selected_shift?{is shift key<br>pressed?}
     /// select? -- no --> unselected_shift?{is shift key<br>pressed?}
 
-    /// selected_shift? -- yes --> r[Remove from Selection]  
-    /// selected_shift? -- no --> Move
+    /// selected_shift? -- yes --> r[Remove from Selection]
+    /// selected_shift? -- no --> Nothing to do
 
-    /// unselected_shift? -- yes --> i[Inclusive Select] --> Move
-    /// unselected_shift? -- no --> e[Exclusive Select] -->Move
+    /// unselected_shift? -- yes --> i[Inclusive Select]
+    /// unselected_shift? -- no --> e[Exclusive Select]
     /// ```
     pub fn selection(&mut self, id: NodeId, is_shift_key_pressed: bool) {
         if is_shift_key_pressed {
