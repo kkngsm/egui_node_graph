@@ -120,7 +120,7 @@ pub enum MyResponse {
 /// The graph 'global' state. This state struct is passed around to the node and
 /// parameter drawing callbacks. The contents of this struct are entirely up to
 /// the user. For this example, we use it to keep track of the 'active' node.
-#[derive(Default, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct MyGraphState {
     pub active_node: Option<NodeId>,
@@ -144,7 +144,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
     type NodeData = MyNodeData;
     type DataType = MyDataType;
     type ValueType = MyValueType;
-    type UserState = MyGraphState;
+    type UserState = Rc<RefCell<MyGraphState>>;
 
     fn node_finder_label(&self, _user_state: &Self::UserState) -> std::borrow::Cow<str> {
         Cow::Borrowed(match self {
@@ -281,7 +281,7 @@ impl NodeTemplateIter for MyNodeTemplate {
 
 impl WidgetValueTrait for MyValueType {
     type Response = MyResponse;
-    type UserState = MyGraphState;
+    type UserState = Rc<RefCell<MyGraphState>>;
     type NodeData = MyNodeData;
     fn value_widget(
         &self,
@@ -363,7 +363,7 @@ impl WidgetValueTrait for MyValueType {
 
 impl UserResponseTrait for MyResponse {}
 impl NodeDataTrait for MyNodeData {
-    type UserState = MyGraphState;
+    type UserState = Rc<RefCell<MyGraphState>>;
     type DataType = MyDataType;
     type ValueType = MyValueType;
     type Response = MyResponse;
@@ -386,6 +386,7 @@ impl NodeDataTrait for MyNodeData {
         // the value stored in the global user state, and draw different button
         // UIs based on that.
         let is_active = user_state
+            .borrow()
             .active_node
             .map(|id| id == node_id)
             .unwrap_or(false);
@@ -426,7 +427,7 @@ type GraphEditor = yew_node_graph::components::GraphEditor<
     MyDataType,
     MyValueType,
     MyNodeTemplate,
-    MyGraphState,
+    Rc<RefCell<MyGraphState>>,
     MyResponse,
 >;
 type GraphEditorState =
@@ -466,7 +467,7 @@ fn app() -> yew::Html {
         <>
         <div style={"padding:1rem;"}>
         <GraphEditor
-            user_state={(*user_state.borrow()).clone()}
+            user_state={user_state.clone()}
             {graph_editor_state}
             {callback}
         />
