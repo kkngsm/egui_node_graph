@@ -268,7 +268,7 @@ where
                 button,
                 pos,
                 is_shift_key_pressed,
-            } if button != 2 => {
+            } if button == 0 => {
                 {
                     let mut state = state.borrow_mut();
                     state.node_finder.is_showing = false;
@@ -301,6 +301,59 @@ where
                     },
                 );
             }
+            BackgroundEvent::MouseDown { button, pos, .. } if button == 1 => {
+                {
+                    log::debug!("pan");
+                    let mut state = state.borrow_mut();
+                    state.node_finder.is_showing = false;
+                    state.drag_state = Some(DragState::Pan { prev_pos: pos })
+                }
+                *event_listener.borrow_mut() = set_drag_event(
+                    &state.borrow().graph_ref,
+                    {
+                        let updater = updater.clone();
+                        let state = state.clone();
+                        move |e| {
+                            let e = e.dyn_ref::<MouseEvent>().unwrap_throw();
+                            let view_pos = get_mouse_pos_from_current_target(e);
+                            let GraphEditorState {
+                                pan_zoom,
+                                drag_state,
+                                ..
+                            } = &mut *state.borrow_mut();
+                            if let Some(DragState::Pan { prev_pos }) = drag_state {
+                                let delta = view_pos - *prev_pos;
+                                pan_zoom.pan += delta;
+                                *prev_pos = view_pos;
+                            }
+                            updater.force_update();
+                        }
+                    },
+                    {
+                        let event_listener = event_listener.clone();
+                        let updater = updater.clone();
+                        move |_| {
+                            event_listener.borrow_mut().take();
+                            updater.force_update();
+                        }
+                    },
+                );
+            }
+            BackgroundEvent::Wheel { delta_y, pos } => {
+                let mut state = state.borrow_mut();
+                let zoom = state.pan_zoom.zoom
+                    + if delta_y.is_sign_negative() {
+                        0.1
+                    } else {
+                        -0.1
+                    };
+                if zoom >= 0.1 && zoom <= 2.0 {
+                    let logical_pos = state.pan_zoom.screen2logical(pos);
+                    let zoom = zoom / state.pan_zoom.zoom;
+                    state.pan_zoom.zoom_to_pos(zoom, logical_pos);
+                }
+                updater.force_update();
+            }
             _ => (),
         }
     });
@@ -329,18 +382,21 @@ where
 
     let graph = graph_editor_state.borrow().graph.clone();
     let nodes = graph.nodes.keys().map(|id| {
+        let state = graph_editor_state.borrow();
+        let logical = state.node_positions[id];
+        let pos = state.pan_zoom.logical2screen(logical);
         let user_state = user_state.to_owned();
         html! {<Node<NodeData, DataType, ValueType, UserState, UserResponse>
             key={id.to_string()}
             data={graph[id].clone()}
-            pos={graph_editor_state.borrow().node_positions[id]}
-            is_selected={graph_editor_state.borrow().selected_nodes.contains(&id)}
+            {pos}
+            is_selected={state.selected_nodes.contains(&id)}
             node_callback={node_callback.clone()}
             port_callback={port_callback.clone()}
             user_callback={user_callback.clone()}
             user_state={user_state}
             graph={graph.clone()}
-            ports_ref={graph_editor_state.borrow().port_refs.clone()}
+            ports_ref={state.port_refs.clone()}
         />}
     });
 

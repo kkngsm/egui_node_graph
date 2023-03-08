@@ -61,17 +61,20 @@ pub fn get_mouse_pos_from_current_target(e: &MouseEvent) -> Vec2 {
 /// }
 ///
 /// ```
-pub fn use_event_listeners<const N: usize>(
+pub fn use_event_listeners<Event, const N: usize>(
     node_ref: NodeRef,
-    events_callbacks: [(&'static str, Box<dyn Fn(MouseEvent)>); N],
-) {
+    events_callbacks: [(&'static str, Box<dyn Fn(Event)>); N],
+) where
+    Event: 'static,
+    dyn Fn(Event): wasm_bindgen::closure::WasmClosure,
+{
     use_effect_with_deps(
         move |div_ref| {
             let div = div_ref
                 .cast::<Element>()
                 .expect("div_ref not attached to div element");
             let events_callbacks = events_callbacks
-                .map(|(event, callback)| (event, Closure::<dyn Fn(MouseEvent)>::wrap(callback)));
+                .map(|(event, callback)| (event, Closure::<dyn Fn(Event)>::wrap(callback)));
             for (event, callback) in &events_callbacks {
                 div.add_event_listener_with_callback(event, callback.as_ref().unchecked_ref())
                     .unwrap();

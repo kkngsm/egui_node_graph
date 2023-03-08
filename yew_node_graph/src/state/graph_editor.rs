@@ -17,11 +17,11 @@ use slotmap::SecondaryMap;
 
 use yew::NodeRef;
 
-use super::{AnyParameterId, ConnectionInProgress, InputId, Node, OutputId};
+use super::{AnyParameterId, ConnectionInProgress, InputId, Node, OutputId, PanZoom};
 
 /// Basic GraphEditor components
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GraphEditorState<NodeData, DataType, ValueType, NodeTemplate> {
     pub graph: Rc<Graph<NodeData, DataType, ValueType>>,
     //TODO
@@ -39,8 +39,8 @@ pub struct GraphEditorState<NodeData, DataType, ValueType, NodeTemplate> {
 
     pub node_finder: NodeFinder,
 
-    // /// The panning of the graph viewport.
-    // pub pan_zoom: PanZoom,
+    /// The panning of the graph viewport.
+    pub pan_zoom: PanZoom,
     ///
     pub graph_ref: NodeRef,
 
@@ -59,6 +59,7 @@ impl<NodeData, DataType, ValueType, NodeTemplate> Default
             node_positions: Default::default(),
             port_refs: Default::default(),
             node_finder: Default::default(),
+            pan_zoom: Default::default(),
             graph_ref: Default::default(),
             drag_state: Default::default(),
             _phantom: PhantomData,
@@ -130,7 +131,7 @@ where
             template.user_data(user_state),
             |graph, node_id| template.build_node(graph, user_state, node_id),
         );
-        let pos = self.node_finder.pos;
+        let pos = self.pan_zoom.screen2logical(self.node_finder.pos);
 
         let selected_nodes = Rc::make_mut(&mut self.selected_nodes);
         let node_positions = Rc::make_mut(&mut self.node_positions);
@@ -179,7 +180,7 @@ where
         if let Some(DragState::MoveNode { id, shift, .. }) = self.drag_state.as_mut() {
             let pos = pos - *shift;
             let selected_pos = self.node_positions[*id];
-            let drag_delta = pos - selected_pos;
+            let drag_delta = self.pan_zoom.screen2logical(pos) - selected_pos;
             let node_positions = Rc::make_mut(&mut self.node_positions);
             for id in self.selected_nodes.iter().copied() {
                 node_positions[id] += drag_delta;
@@ -254,8 +255,9 @@ where
     }
     pub fn end_select_box(&mut self) {
         if let Some(DragState::SelectBox { end, start }) = self.drag_state.take() {
-            let min = start.min(end);
-            let max = start.max(end);
+            let min = self.pan_zoom.screen2logical(start.min(end));
+            let max = self.pan_zoom.screen2logical(start.max(end));
+
             for id in self
                 .node_positions
                 .iter()

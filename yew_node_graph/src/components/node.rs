@@ -8,6 +8,7 @@ use crate::{
     Vec2,
 };
 use stylist::yew::styled_component;
+use wasm_bindgen::JsCast;
 use yew::prelude::*;
 
 use super::port::{InputWidget, OutputWidget, Port, PortEvent, PortUnit};
@@ -120,7 +121,7 @@ position:absolute;
 user-select:none;
 "#};
     let node_ref = use_node_ref();
-    use_event_listeners(
+    use_event_listeners::<MouseEvent, 1>(
         node_ref.clone(),
         [(
             "mousedown",

@@ -1,26 +1,172 @@
+use std::{cell::RefCell, ops::Index, rc::Rc};
+
+use glam::Vec2;
+use slotmap::SecondaryMap;
+
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Default, Copy, Clone)]
+/// A 2D affine transform, witch specializes only in translation and scaling.
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct PanZoom {
-    pub pan: crate::Vec2,
+    pub pan: Vec2,
     pub zoom: f32,
 }
 
-impl PanZoom {
-    pub fn adjust_zoom(
-        &mut self,
-        zoom_delta: f32,
-        point: crate::Vec2,
-        zoom_min: f32,
-        zoom_max: f32,
-    ) {
-        let zoom_clamped = (self.zoom + zoom_delta).clamp(zoom_min, zoom_max);
-        let zoom_delta = zoom_clamped - self.zoom;
-
-        self.zoom += zoom_delta;
-        self.pan += point * zoom_delta;
+impl Default for PanZoom {
+    fn default() -> Self {
+        Self {
+            pan: Vec2::ZERO,
+            zoom: 1.0,
+        }
     }
 }
 
+impl PanZoom {
+    /// Zoom around the specified coordinates.
+    /// Objects at the specified coordinates do not move.
+    ///```rust
+    /// use yew_node_graph::{vec2, state::PanZoom};
+    ///
+    /// let p_a = vec2(24.0, 43.0);
+    /// let p_b = vec2(8.0, 58.0);
+    ///
+    /// // zooming around p_a
+    /// let pan_zoom = PanZoom::from_zoom_to_pos(3.0, p_a);
+    ///
+    /// assert_eq!(pan_zoom, PanZoom{
+    ///     pan: vec2(-48.0, -86.0),
+    ///     zoom: 3.0
+    /// });
+    ///
+    /// // p_a does not move
+    /// assert_eq!(pan_zoom.logical2screen(p_a), p_a);
+    ///
+    /// // p_b is zoomed around p_a
+    /// assert_eq!(pan_zoom.logical2screen(p_b), vec2(-24.0, 88.0));
+    /// ```
+    pub fn from_zoom_to_pos(zoom: f32, pos: Vec2) -> Self {
+        Self {
+            zoom,
+            pan: pos * (1.0 - zoom),
+        }
+    }
+    /// Zoom around the specified coordinates.
+    /// Objects at the specified coordinates do not move.
+    ///
+    /// This is the same as `pan_zoom = pan_zoom * PanZoom::from_zoom_to_pos(zoom, pos);`
+    ///```rust
+    /// use yew_node_graph::{vec2, state::PanZoom};
+    ///
+    /// let mut pan_zoom = PanZoom{
+    ///     pan: vec2(35.0, 23.0),
+    ///     zoom: 2.0
+    /// };
+    ///
+    /// pan_zoom.zoom_to_pos(3.0, vec2(94.0, 38.0));
+    /// assert_eq!(pan_zoom, PanZoom{
+    ///     pan: vec2(-341.0, -129.0),
+    ///     zoom: 6.0
+    /// });
+    ///
+    /// let p = vec2(52.0, 8.0);
+    /// let screen_p = pan_zoom.logical2screen(p);
+    ///
+    /// // If you want to specify a zoom factor, you can do this.
+    /// let zoom_rate = 12.0 / pan_zoom.zoom;
+    /// pan_zoom.zoom_to_pos(zoom_rate, p);
+    /// assert_eq!(pan_zoom, PanZoom{
+    ///     pan: vec2(-653.0, -177.0),
+    ///     zoom: 12.0
+    /// });
+    /// // In this case, too, the object at the center of the zoom does not move.
+    /// assert_eq!(pan_zoom.logical2screen(p), screen_p);
+    /// ```
+    pub fn zoom_to_pos(&mut self, zoom: f32, logical_pos: Vec2) {
+        *self = *self * PanZoom::from_zoom_to_pos(zoom, logical_pos);
+    }
+
+    pub fn logical2screen(&self, pos: Vec2) -> Vec2 {
+        self * pos
+    }
+
+    pub fn screen2logical(&self, pos: Vec2) -> Vec2 {
+        self.inverse() * pos
+    }
+
+    pub fn pan_screen(&mut self, delta: Vec2) {
+        self.pan += delta;
+    }
+    pub fn pan_logical(&mut self, delta: Vec2) {
+        self.pan += delta * self.zoom
+    }
+
+    fn inverse(&self) -> Self {
+        let iz = 1.0 / self.zoom;
+        Self {
+            pan: -self.pan * iz,
+            zoom: iz,
+        }
+    }
+}
+
+macro_rules! impl_panzoom_ops {
+    ($panzoom: ty) => {
+        impl std::ops::Mul<Vec2> for $panzoom {
+            type Output = Vec2;
+            fn mul(self, rhs: Vec2) -> Self::Output {
+                self.zoom * rhs + self.pan
+            }
+        }
+
+        impl std::ops::Mul<PanZoom> for $panzoom {
+            type Output = PanZoom;
+            fn mul(self, rhs: PanZoom) -> Self::Output {
+                PanZoom {
+                    pan: self.pan + rhs.pan * self.zoom,
+                    zoom: self.zoom * rhs.zoom,
+                }
+            }
+        }
+    };
+}
+impl_panzoom_ops!(PanZoom);
+impl_panzoom_ops!(&PanZoom);
+#[cfg(test)]
+mod test {
+    use glam::vec2;
+
+    use super::PanZoom;
+
+    #[test]
+    fn mul_v2_test() {
+        let pan_zoom = PanZoom {
+            pan: vec2(43.0, 58.0),
+            zoom: 3.0,
+        };
+        assert_eq!(pan_zoom * vec2(74.0, 34.0), vec2(265.0, 160.0))
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn mul_self_test() {
+        use super::PanZoom;
+
+        let pan_zoom = PanZoom {
+            pan: vec2(43.0, 58.0),
+            zoom: 3.0,
+        };
+        let another = PanZoom {
+            pan: vec2(25.0, 79.0),
+            zoom: 4.0,
+        };
+        assert_eq!(
+            pan_zoom * another,
+            PanZoom {
+                pan: vec2(118.0, 295.0),
+                zoom: 12.0,
+            }
+        )
+    }
+}
 /// NodeFinder Status
 /// this is used to create new nodes.
 #[derive(Debug, Default, Clone)]
@@ -29,11 +175,6 @@ pub struct NodeFinder {
     pub pos: crate::Vec2,
     pub is_showing: bool,
 }
-
-use std::{cell::RefCell, ops::Index, rc::Rc};
-
-use glam::Vec2;
-use slotmap::SecondaryMap;
 
 use super::{AnyParameterId, InputId, NodeId, OutputId};
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
@@ -363,6 +504,9 @@ pub enum DragState {
     SelectBox {
         start: Vec2,
         end: Vec2,
+    },
+    Pan {
+        prev_pos: Vec2,
     },
     MoveNode {
         id: NodeId,
